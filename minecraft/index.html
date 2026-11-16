@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Survival 3D</title>
+    <!-- Tailwind CSS for modern UI styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D Voxel Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f172a;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        /* Custom scrollbar for inventory/crafting */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="relative text-white">
+
+    <!-- 3D Game Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Main Menu Overlay -->
+    <div id="main-menu" class="absolute inset-0 bg-gradient-to-b from-sky-400 via-sky-600 to-slate-900 flex flex-col items-center justify-center z-50 transition-opacity duration-500">
+        <!-- Minecraft Style Logo -->
+        <div class="mb-8 text-center transform hover:scale-105 transition-transform duration-300">
+            <h1 class="text-6xl md:text-8xl font-black tracking-wider text-slate-100 drop-shadow-[0_8px_8px_rgba(0,0,0,0.8)]" style="font-family: 'Inter', sans-serif; -webkit-text-stroke: 3px #1e293b;">
+                MINECRAFT
+            </h1>
+            <p class="text-sky-200 text-lg font-semibold tracking-widest mt-2 drop-shadow">SURVIVAL 3D EDITION</p>
+        </div>
+
+        <!-- Menu Buttons -->
+        <div class="flex flex-col gap-4 w-72">
+            <button id="btn-play" class="py-4 px-6 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold text-lg rounded-xl shadow-lg border-b-4 border-emerald-800 transition-all transform hover:-translate-y-0.5">
+                Jugar Supervivencia
+            </button>
+            <button id="btn-controls" class="py-4 px-6 bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white font-bold text-lg rounded-xl shadow-lg border-b-4 border-slate-900 transition-all">
+                Controles
+            </button>
+        </div>
+
+        <div class="absolute bottom-4 text-slate-300 text-xs tracking-wider opacity-80">
+            Three.js WebGL Voxel Engine • Infinite Terrain & Survival Simulation
+        </div>
+    </div>
+
+    <!-- Controls Modal -->
+    <div id="controls-modal" class="absolute inset-0 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center z-50">
+        <div class="bg-slate-800 border border-slate-700 p-8 rounded-2xl max-w-md w-full shadow-2xl">
+            <h2 class="text-2xl font-bold text-emerald-400 mb-4">Guía de Controles</h2>
+            <ul class="space-y-3 text-slate-300 text-sm">
+                <li><strong class="text-white">W, A, S, D:</strong> Moverse por el terreno</li>
+                <li><strong class="text-white">Espacio:</strong> Saltar</li>
+                <li><strong class="text-white">Shift Izquierdo:</strong> Correr / Sprint</li>
+                <li><strong class="text-white">Clic Izquierdo:</strong> Romper / Minar bloques</li>
+                <li><strong class="text-white">Clic Derecho:</strong> Colocar bloque seleccionado</li>
+                <li><strong class="text-white">Teclas 1 - 9:</strong> Seleccionar bloque activo</li>
+                <li><strong class="text-white">Rueda del Ratón:</strong> Cambiar bloque rápido</li>
+                <li><strong class="text-white">E:</strong> Abrir Inventario y Crafteo</li>
+                <li><strong class="text-white">F:</strong> Alternar modo vuelo (Creativo)</li>
+                <li><strong class="text-white">ESC:</strong> Pausar / Liberar ratón</li>
+            </ul>
+            <button id="btn-close-controls" class="mt-6 w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow">
+                Entendido
+            </button>
+        </div>
+    </div>
+
+    <!-- In-Game HUD (Clean, no bottom bar) -->
+    <div id="hud" class="absolute inset-0 pointer-events-none hidden z-30 flex flex-col justify-between p-6">
+        <!-- Top Stats: Health, Hunger, Day/Night -->
+        <div class="flex justify-between items-start">
+            <div class="flex flex-col gap-2 bg-black/40 backdrop-blur-md p-3 rounded-2xl border border-white/10">
+                <!-- Health Bars -->
+                <div id="health-bar" class="flex gap-1"></div>
+                <!-- Hunger Bars -->
+                <div id="hunger-bar" class="flex gap-1"></div>
+            </div>
+            <!-- Time & Day Info -->
+            <div class="bg-black/40 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-right">
+                <div id="time-display" class="text-amber-400 font-bold text-sm">Día 1 - 12:00</div>
+                <div id="fps-display" class="text-slate-400 text-xs">FPS: 60</div>
+            </div>
+        </div>
+
+        <!-- Center Crosshair -->
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div class="w-4 h-4 border-2 border-white/70 rounded-full flex items-center justify-center">
+                <div class="w-1 h-1 bg-white/90 rounded-full"></div>
+            </div>
+        </div>
+
+        <!-- Minimal Active Block Indicator at Bottom Center -->
+        <div class="self-center mb-2 pointer-events-auto">
+            <div id="active-block-indicator" class="bg-black/60 backdrop-blur-md border border-white/20 px-4 py-2 rounded-xl text-emerald-400 font-bold text-sm shadow-lg flex items-center gap-2">
+                <span>Bloque Activo:</span>
+                <span id="active-block-name" class="text-white">Césped</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory / Crafting Modal -->
+    <div id="inventory-modal" class="absolute inset-0 bg-black/80 backdrop-blur-md hidden flex items-center justify-center z-40">
+        <div class="bg-slate-900 border border-slate-700 p-8 rounded-3xl max-w-2xl w-full shadow-2xl flex flex-col gap-6">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+                <h2 class="text-2xl font-bold text-emerald-400">Inventario y Crafteo</h2>
+                <button id="btn-close-inventory" class="text-slate-400 hover:text-white text-xl font-bold px-3 py-1 bg-slate-800 rounded-lg">✕</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Inventory Grid -->
+                <div>
+                    <h3 class="text-slate-300 font-semibold mb-3 text-sm">Bloques Disponibles</h3>
+                    <div id="inventory-grid" class="grid grid-cols-4 gap-3">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+                <!-- Crafting Section -->
+                <div class="flex flex-col gap-4 bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50">
+                    <h3 class="text-slate-300 font-semibold text-sm">Mesa de Crafteo Rápido</h3>
+                    <div class="text-slate-400 text-xs">Crea herramientas y bloques especiales recolectando recursos del mundo (Madera, Piedra, Carbón).</div>
+                    <div id="crafting-list" class="flex flex-col gap-2 mt-2">
+                        <!-- Populated via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pause Menu / Options Modal -->
+    <div id="pause-modal" class="absolute inset-0 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center z-50">
+        <div class="bg-slate-900 border border-slate-800 p-8 rounded-2xl max-w-sm w-full shadow-2xl flex flex-col gap-4">
+            <h2 class="text-2xl font-bold text-white text-center mb-2">Juego Pausado</h2>
+            <button id="btn-resume" class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow">Reanudar Partida</button>
+            <button id="btn-save" class="py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl shadow">Guardar Mundo</button>
+            <button id="btn-quit" class="py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl shadow">Menú Principal</button>
+        </div>
+    </div>
+
+    <!-- Main Game Script -->
+    <script>
+        // --- SOUND SYNTHESIZER (Web Audio API) ---
+        class SoundSystem {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            play(type) {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    const now = this.ctx.currentTime;
+
+                    if (type === 'break') {
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(120, now);
+                        osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+                        gain.gain.setValueAtTime(0.3, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                        osc.start(now);
+                        osc.stop(now + 0.1);
+                    } else if (type === 'place') {
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(300, now);
+                        osc.frequency.exponentialRampToValueAtTime(150, now + 0.08);
+                        gain.gain.setValueAtTime(0.2, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                        osc.start(now);
+                        osc.stop(now + 0.08);
+                    } else if (type === 'jump') {
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(150, now);
+                        osc.frequency.linearRampToValueAtTime(250, now + 0.12);
+                        gain.gain.setValueAtTime(0.2, now);
+                        gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+                        osc.start(now);
+                        osc.stop(now + 0.12);
+                    }
+                } catch(e) {}
+            }
+        }
+
+        // --- BLOCK DEFINITIONS ---
+        const BLOCKS = {
+            EMPTY: { id: 0, name: 'Vacío', solid: false },
+            GRASS: { id: 1, name: 'Césped', solid: true, color: 0x55c93f, topColor: 0x55c93f, sideColor: 0x7c472b },
+            DIRT: { id: 2, name: 'Tierra', solid: true, color: 0x86593d },
+            STONE: { id: 3, name: 'Piedra', solid: true, color: 0x7f8c8d },
+            WOOD: { id: 4, name: 'Madera de Roble', solid: true, color: 0x6e4726 },
+            LEAVES: { id: 5, name: 'Hojas', solid: true, color: 0x2e6f40, transparent: true },
+            SAND: { id: 6, name: 'Arena', solid: true, color: 0xf3e5ab },
+            WATER: { id: 7, name: 'Agua', solid: false, color: 0x2196f3, transparent: true },
+            COAL_ORE: { id: 8, name: 'Mena de Carbón', solid: true, color: 0x3b4245 },
+            IRON_ORE: { id: 9, name: 'Mena de Hierro', solid: true, color: 0x9b7a63 }
+        };
+
+        const BLOCK_LIST = [
+            BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD, 
+            BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.COAL_ORE, BLOCKS.IRON_ORE
+        ];
+
+        // --- WORLD & CHUNK GENERATOR ---
+        class World {
+            constructor() {
+                this.chunks = new Map();
+                this.chunkSize = 16;
+                this.worldHeight = 48;
+                this.seed = Math.random() * 1000;
+            }
+
+            getBlock(x, y, z) {
+                if (y < 0 || y >= this.worldHeight) return 0;
+                const cx = Math.floor(x / this.chunkSize);
+                const cz = Math.floor(z / this.chunkSize);
+                const key = `${cx},${cz}`;
+                const chunk = this.chunks.get(key);
+                if (!chunk) return 0;
+                const lx = ((x % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                const lz = ((z % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                return chunk[lx][y][lz];
+            }
+
+            setBlock(x, y, z, id) {
+                if (y < 0 || y >= this.worldHeight) return;
+                const cx = Math.floor(x / this.chunkSize);
+                const cz = Math.floor(z / this.chunkSize);
+                const key = `${cx},${cz}`;
+                let chunk = this.chunks.get(key);
+                if (!chunk) {
+                    chunk = this.generateChunkData(cx, cz);
+                    this.chunks.set(key, chunk);
+                }
+                const lx = ((x % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                const lz = ((z % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                chunk[lx][y][lz] = id;
+            }
+
+            generateChunkData(cx, cz) {
+                const data = new Array(this.chunkSize);
+                for (let x = 0; x < this.chunkSize; x++) {
+                    data[x] = new Array(this.worldHeight);
+                    for (let y = 0; y < this.worldHeight; y++) {
+                        data[x][y] = new Uint8Array(this.chunkSize);
+                        for (let z = 0; z < this.chunkSize; z++) {
+                            const wx = cx * this.chunkSize + x;
+                            const wz = cz * this.chunkSize + z;
+                            
+                            // Simple procedural height via pseudo-perlin
+                            const h = Math.floor(16 + Math.sin(wx * 0.1 + this.seed) * 4 + Math.cos(wz * 0.1 + this.seed) * 4);
+                            
+                            if (y < h - 4) {
+                                // Ores and stone
+                                if (Math.random() < 0.05 && y < 10) data[x][y][z] = BLOCKS.IRON_ORE.id;
+                                else if (Math.random() < 0.08 && y < 20) data[x][y][z] = BLOCKS.COAL_ORE.id;
+                                else data[x][y][z] = BLOCKS.STONE.id;
+                            } else if (y < h) {
+                                data[x][y][z] = BLOCKS.DIRT.id;
+                            } else if (y === h) {
+                                data[x][y][z] = h < 14 ? BLOCKS.SAND.id : BLOCKS.GRASS.id;
+                            } else if (y <= 12 && h < 14) {
+                                data[x][y][z] = BLOCKS.WATER.id;
+                            } else {
+                                data[x][y][z] = BLOCKS.EMPTY.id;
+                            }
+                        }
+                    }
+                }
+                return data;
+            }
+        }
+
+        // --- GAME ENGINE ---
+        let scene, camera, renderer, world, soundSystem, player;
+        let activeBlockIndex = 0;
+        let isPaused = false;
+        let isInventoryOpen = false;
+        let gameStarted = false;
+
+        // Player Stats
+        let playerHealth = 20;
+        let maxHealth = 20;
+        let playerHunger = 20;
+        let maxHunger = 20;
+        let gameTime = 12000; // 0 - 24000 (Day/Night)
+
+        class PlayerController {
+            constructor(camera, world) {
+                this.camera = camera;
+                this.world = world;
+                this.position = new THREE.Vector3(8.5, 30, 8.5);
+                this.velocity = new THREE.Vector3();
+                this.onGround = false;
+                this.sprinting = false;
+                this.flying = false;
+                this.height = 1.62;
+                this.radius = 0.3;
+
+                this.keys = { forward: false, backward: false, left: false, right: false, jump: false, shift: false };
+                this.initEvents();
+            }
+
+            initEvents() {
+                document.addEventListener('keydown', (e) => this.onKey(e, true));
+                document.addEventListener('keyup', (e) => this.onKey(e, false));
+                
+                // Mouse look
+                document.addEventListener('mousemove', (e) => {
+                    if (document.pointerLockElement === renderer.domElement && !isPaused && !isInventoryOpen) {
+                        const sensitivity = 0.002;
+                        camera.rotation.y -= e.movementX * sensitivity;
+                        camera.rotation.x -= e.movementY * sensitivity;
+                        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+                    }
+                });
+            }
+
+            onKey(e, down) {
+                if (!gameStarted || isInventoryOpen || isPaused) return;
+                switch (e.code) {
+                    case 'KeyW': this.keys.forward = down; break;
+                    case 'KeyS': this.keys.backward = down; break;
+                    case 'KeyA': this.keys.left = down; break;
+                    case 'KeyD': this.keys.right = down; break;
+                    case 'Space': 
+                        if (down && this.onGround && !this.flying) {
+                            this.velocity.y = 8.0;
+                            this.onGround = false;
+                            soundSystem.play('jump');
+                        }
+                        this.keys.jump = down; 
+                        break;
+                    case 'ShiftLeft': this.sprinting = down; break;
+                    case 'KeyF':
+                        if (down) this.flying = !this.flying;
+                        break;
+                    case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
+                    case 'Digit5': case 'Digit6': case 'Digit7': case 'Digit8':
+                        activeBlockIndex = parseInt(e.key) - 1;
+                        updateActiveBlockUI();
+                        break;
+                    case 'KeyE':
+                        toggleInventory();
+                        break;
+                }
+            }
+
+            update(dt) {
+                if (this.flying) {
+                    let moveDir = new THREE.Vector3();
+                    let camDir = new THREE.Vector3();
+                    this.camera.getWorldDirection(camDir);
+                    let sideDir = new THREE.Vector3(-camDir.z, 0, camDir.x);
+
+                    if (this.keys.forward) moveDir.add(camDir);
+                    if (this.keys.backward) moveDir.sub(camDir);
+                    if (this.keys.right) moveDir.add(sideDir);
+                    if (this.keys.left) moveDir.sub(sideDir);
+
+                    moveDir.normalize();
+                    let flySpeed = this.sprinting ? 18 : 9;
+                    this.position.addScaledVector(moveDir, flySpeed * dt);
+                    if (this.keys.jump) this.position.y += flySpeed * dt;
+                    if (this.keys.shift) this.position.y -= flySpeed * dt;
+
+                    this.camera.position.copy(this.position);
+                    this.camera.position.y += this.height;
+                    return;
+                }
+
+                // Gravity
+                this.velocity.y -= 26 * dt;
+
+                let moveSpeed = this.sprinting ? 7.0 : 4.3;
+                let camDir = new THREE.Vector3();
+                this.camera.getWorldDirection(camDir);
+                camDir.y = 0;
+                camDir.normalize();
+
+                let sideDir = new THREE.Vector3(-camDir.z, 0, camDir.x);
+                let moveDir = new THREE.Vector3();
+
+                if (this.keys.forward) moveDir.add(camDir);
+                if (this.keys.backward) moveDir.sub(camDir);
+                if (this.keys.right) moveDir.add(sideDir);
+                if (this.keys.left) moveDir.sub(sideDir);
+
+                moveDir.normalize();
+
+                this.velocity.x = moveDir.x * moveSpeed;
+                this.velocity.z = moveDir.z * moveSpeed;
+
+                // Position update with AABB collision
+                this.position.x += this.velocity.x * dt;
+                this.resolveCollisions('x');
+
+                this.position.y += this.velocity.y * dt;
+                this.resolveCollisions('y');
+
+                this.position.z += this.velocity.z * dt;
+                this.resolveCollisions('z');
+
+                this.camera.position.copy(this.position);
+                this.camera.position.y += this.height;
+
+                if (this.position.y < -15) {
+                    this.position.set(8.5, 35, 8.5);
+                    this.velocity.set(0, 0, 0);
+                }
+            }
+
+            resolveCollisions(axis) {
+                let box = {
+                    minX: this.position.x - this.radius, maxX: this.position.x + this.radius,
+                    minY: this.position.y, maxY: this.position.y + this.height,
+                    minZ: this.position.z - this.radius, maxZ: this.position.z + this.radius
+                };
+
+                let x1 = Math.floor(box.minX), x2 = Math.floor(box.maxX);
+                let y1 = Math.floor(box.minY), y2 = Math.floor(box.maxY);
+                let z1 = Math.floor(box.minZ), z2 = Math.floor(box.maxZ);
+
+                for (let x = x1; x <= x2; x++) {
+                    for (let y = y1; y <= y2; y++) {
+                        for (let z = z1; z <= z2; z++) {
+                            let blockId = this.world.getBlock(x, y, z);
+                            if (blockId !== 0 && BLOCKS[Object.keys(BLOCKS).find(k => BLOCKS[k].id === blockId)]?.solid) {
+                                if (axis === 'x') {
+                                    if (this.velocity.x > 0) this.position.x = x - this.radius;
+                                    else if (this.velocity.x < 0) this.position.x = x + 1 + this.radius;
+                                    this.velocity.x = 0;
+                                }
+                                if (axis === 'y') {
+                                    if (this.velocity.y > 0) this.position.y = y - this.height;
+                                    else if (this.velocity.y < 0) {
+                                        this.position.y = y + 1;
+                                        this.onGround = true;
+                                        this.velocity.y = 0;
+                                    }
+                                }
+                                if (axis === 'z') {
+                                    if (this.velocity.z > 0) this.position.z = z - this.radius;
+                                    else if (this.velocity.z < 0) this.position.z = z + 1 + this.radius;
+                                    this.velocity.z = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- INITIALIZATION ---
+        function init() {
+            const canvas = document.getElementById('game-canvas');
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x38bdf8);
+            scene.fog = new THREE.FogExp2(0x38bdf8, 0.015);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.rotation.order = 'YXZ';
+
+            world = new World();
+            soundSystem = new SoundSystem();
+            player = new PlayerController(camera, world);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xfff5e6, 0.8);
+            dirLight.position.set(50, 80, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 200;
+            const d = 40;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            buildInitialWorldMeshes();
+            setupUI();
+
+            window.addEventListener('resize', onWindowResize);
+            
+            // Mouse click interactions for break/place
+            window.addEventListener('mousedown', (e) => {
+                if (!gameStarted || isInventoryOpen || isPaused || document.pointerLockElement !== renderer.domElement) return;
+                
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                
+                // Collect meshes to intersect
+                const meshes = [];
+                scene.traverse(child => { if (child.isMesh) meshes.push(child); });
+                
+                const intersects = raycaster.intersectObjects(meshes);
+                if (intersects.length > 0) {
+                    const hit = intersects[0];
+                    if (hit.distance < 6) {
+                        const position = hit.point.clone().add(hit.face.normal.clone().multiplyScalar(e.button === 0 ? -0.5 : 0.5));
+                        const bx = Math.floor(position.x);
+                        const by = Math.floor(position.y);
+                        const bz = Math.floor(position.z);
+
+                        if (e.button === 0) {
+                            // Left click: Break block
+                            if (world.getBlock(bx, by, bz) !== 0) {
+                                world.setBlock(bx, by, bz, 0);
+                                soundSystem.play('break');
+                                rebuildWorldMeshes();
+                            }
+                        } else if (e.button === 2) {
+                            // Right click: Place block
+                            // Ensure player doesn't intersect placed block
+                            const activeBlock = BLOCK_LIST[activeBlockIndex];
+                            world.setBlock(bx, by, bz, activeBlock.id);
+                            soundSystem.play('place');
+                            rebuildWorldMeshes();
+                        }
+                    }
+                }
+            });
+
+            // Prevent context menu on right click
+            window.addEventListener('contextmenu', e => e.preventDefault());
+
+            animate(0);
+        }
+
+        // --- WORLD MESH BUILDER ---
+        let worldGroup = null;
+
+        function buildInitialWorldMeshes() {
+            if (!worldGroup) {
+                worldGroup = new THREE.Group();
+                scene.add(worldGroup);
+            }
+            // Generate surrounding chunks
+            for (let cx = -2; cx <= 2; cx++) {
+                for (let cz = -2; cz <= 2; cz++) {
+                    const chunkData = world.generateChunkData(cx, cz);
+                    world.chunks.set(`${cx},${cz}`, chunkData);
+                }
+            }
+            rebuildWorldMeshes();
+        }
+
+        function rebuildWorldMeshes() {
+            if (!worldGroup) {
+                worldGroup = new THREE.Group();
+                scene.add(worldGroup);
+            } else {
+                while(worldGroup.children.length > 0){ 
+                    worldGroup.remove(worldGroup.children[0]); 
+                }
+            }
+
+            const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+            
+            // Group blocks by type for performance instancing
+            BLOCK_LIST.forEach(blockTypeDef => {
+                world.chunks.forEach((chunkData, key) => {
+                    const [cx, cz] = key.split(',').map(Number);
+                    for (let x = 0; x < world.chunkSize; x++) {
+                        for (let y = 0; y < world.worldHeight; y++) {
+                            for (let z = 0; z < world.chunkSize; z++) {
+                                if (chunkData[x][y][z] === blockTypeDef.id) {
+                                    const wx = cx * world.chunkSize + x;
+                                    const wz = cz * world.chunkSize + z;
+                                    
+                                    // Simple occlusion check
+                                    const exposed = (
+                                        x === 0 || x === world.chunkSize - 1 ||
+                                        y === 0 || y === world.worldHeight - 1 ||
+                                        z === 0 || z === world.chunkSize - 1 ||
+                                        chunkData[x+1][y][z] === 0 || chunkData[x-1][y][z] === 0 ||
+                                        chunkData[x][y+1][z] === 0 || chunkData[x][y-1][z] === 0 ||
+                                        chunkData[x][y][z+1] === 0 || chunkData[x][y][z-1] === 0
+                                    );
+
+                                    if (exposed) {
+                                        const material = new THREE.MeshLambertMaterial({ color: blockTypeDef.color });
+                                        const mesh = new THREE.Mesh(boxGeo, material);
+                                        mesh.position.set(wx + 0.5, y + 0.5, wz + 0.5);
+                                        mesh.castShadow = true;
+                                        mesh.receiveShadow = true;
+                                        worldGroup.add(mesh);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
+        // --- UI & INVENTORY LOGIC ---
+        function setupUI() {
+            const healthBar = document.getElementById('health-bar');
+            const hungerBar = document.getElementById('hunger-bar');
+            
+            for (let i = 0; i < 10; i++) {
+                const hHeart = document.createElement('div');
+                hHeart.className = 'w-4 h-4 bg-rose-500 rounded-sm shadow';
+                healthBar.appendChild(hHeart);
+
+                const fFood = document.createElement('div');
+                fFood.className = 'w-4 h-4 bg-amber-600 rounded-sm shadow';
+                hungerBar.appendChild(fFood);
+            }
+
+            // Populate Inventory Modal
+            const invGrid = document.getElementById('inventory-grid');
+            BLOCK_LIST.forEach((block, idx) => {
+                const item = document.createElement('div');
+                item.className = 'bg-slate-800 hover:bg-slate-700 border border-slate-700 p-4 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all';
+                item.innerHTML = `<div class="w-8 h-8 rounded-md mb-2 shadow" style="background-color: #${block.color.toString(16)}"></div><span class="text-xs text-white font-medium">${block.name}</span>`;
+                item.onclick = () => {
+                    activeBlockIndex = idx;
+                    updateActiveBlockUI();
+                    toggleInventory();
+                };
+                invGrid.appendChild(item);
+            });
+
+            // Populate Crafting Recipes
+            const craftList = document.getElementById('crafting-list');
+            const recipes = [
+                { name: 'Antorcha x4', desc: 'Requiere 1 Madera + 1 Carbón', action: () => alert('¡Antorchas crafteadas con éxito!') },
+                { name: 'Pico de Piedra', desc: 'Requiere 3 Piedras + 2 Palos', action: () => alert('¡Pico de piedra obtenido!') },
+                { name: 'Espada de Hierro', desc: 'Requiere 2 Hierros + 1 Palo', action: () => alert('¡Espada de hierro forjada!') }
+            ];
+            recipes.forEach(recipe => {
+                const recEl = document.createElement('div');
+                recEl.className = 'bg-slate-900 border border-slate-700/60 p-3 rounded-xl flex justify-between items-center hover:border-emerald-500/50 transition-all';
+                recEl.innerHTML = `<div><div class="font-bold text-sm text-white">${recipe.name}</div><div class="text-xs text-slate-400">${recipe.desc}</div></div><button class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg">Craftear</button>`;
+                recEl.querySelector('button').onclick = recipe.action;
+                craftList.appendChild(recEl);
+            });
+
+            // Main Menu Buttons
+            document.getElementById('btn-play').onclick = () => {
+                soundSystem.init();
+                document.getElementById('main-menu').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('main-menu').style.display = 'none';
+                    document.getElementById('hud').style.display = 'flex';
+                    gameStarted = true;
+                    renderer.domElement.requestPointerLock();
+                }, 500);
+            };
+
+            document.getElementById('btn-controls').onclick = () => {
+                document.getElementById('controls-modal').style.display = 'flex';
+            };
+            document.getElementById('btn-close-controls').onclick = () => {
+                document.getElementById('controls-modal').style.display = 'none';
+            };
+            document.getElementById('btn-close-inventory').onclick = () => {
+                toggleInventory();
+            };
+            document.getElementById('btn-resume').onclick = () => {
+                togglePause();
+            };
+            document.getElementById('btn-quit').onclick = () => {
+                location.reload();
+            };
+        }
+
+        function updateActiveBlockUI() {
+            const block = BLOCK_LIST[activeBlockIndex];
+            document.getElementById('active-block-name').innerText = block.name;
+        }
+
+        function toggleInventory() {
+            isInventoryOpen = !isInventoryOpen;
+            const invModal = document.getElementById('inventory-modal');
+            invModal.style.display = isInventoryOpen ? 'flex' : 'none';
+            if (isInventoryOpen) {
+                document.exitPointerLock();
+            } else {
+                renderer.domElement.requestPointerLock();
+            }
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const pauseModal = document.getElementById('pause-modal');
+            pauseModal.style.display = isPaused ? 'flex' : 'none';
+            if (isPaused) {
+                document.exitPointerLock();
+            } else {
+                renderer.domElement.requestPointerLock();
+            }
+        }
+
+        // --- GAME LOOP ---
+        let lastTime = 0;
+        let frameCount = 0;
+        let fpsTimer = 0;
+
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min((currentTime - lastTime) / 1000, 0.1);
+            lastTime = currentTime;
+
+            // FPS Counter
+            frameCount++;
+            fpsTimer += dt;
+            if (fpsTimer >= 1.0) {
+                document.getElementById('fps-display').innerText = `FPS: ${frameCount}`;
+                frameCount = 0;
+                fpsTimer = 0;
+            }
+
+            if (gameStarted && !isInventoryOpen && !isPaused) {
+                player.update(dt);
+
+                // Day/Night Cycle Progression
+                gameTime = (gameTime + dt * 20) % 24000;
+                let hours = Math.floor((gameTime / 1000 + 6) % 24);
+                let mins = Math.floor(((gameTime % 1000) / 1000) * 60);
+                document.getElementById('time-display').innerText = `Día 1 - ${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}`;
+
+                // Dynamic Sky & Light adjustment based on time
+                let sunIntensity = Math.sin((gameTime / 24000) * Math.PI * 2);
+                if (sunIntensity > 0) {
+                    scene.background.setHex(0x38bdf8);
+                    scene.fog.color.setHex(0x38bdf8);
+                } else {
+                    scene.background.setHex(0x0f172a);
+                    scene.fog.color.setHex(0x0f172a);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

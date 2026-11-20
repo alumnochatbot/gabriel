@@ -1,0 +1,2868 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Subway Surfer 3D — Subway City</title>
+  <!-- Carga de Three.js r128 desde CDN oficial -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    /* ==========================================================================
+       ESTILOS GENERALES Y CAPA DE JUEGO RESPONSIVA
+       ========================================================================== */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #1a2639;
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      touch-action: none;
+    }
+
+    #game-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Efecto radial de líneas de velocidad en los bordes de la pantalla */
+    #speed-streaks {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0.35;
+      transition: opacity 0.25s ease;
+      background:
+        repeating-conic-gradient(
+          from 0deg at 50% 48%,
+          rgba(255, 255, 255, 0.28) 0deg 0.45deg,
+          transparent 0.45deg 6deg
+        );
+      -webkit-mask-image: radial-gradient(circle at 50% 48%, transparent 46%, black 85%);
+      mask-image: radial-gradient(circle at 50% 48%, transparent 46%, black 85%);
+    }
+
+    /* Destello de impacto o recogida de energía */
+    #screen-flash {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 6;
+      opacity: 0;
+      transition: opacity 0.18s ease-out;
+    }
+
+    /* ==========================================================================
+       HUD EN CARRERA (FIEL A LA IMAGEN DE REFERENCIA)
+       ========================================================================== */
+    #hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: max(14px, env(safe-area-inset-top)) 18px 10px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    /* Botón cuadrado amarillo de Pausa arriba a la izquierda */
+    #btn-pause {
+      pointer-events: auto;
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #ffe047 0%, #f5a600 100%);
+      border: 3px solid #2b1d08;
+      box-shadow: 0 4px 0 #2b1d08, 0 6px 14px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      cursor: pointer;
+      transition: transform 0.1s ease;
+    }
+
+    #btn-pause:active {
+      transform: translateY(2px);
+      box-shadow: 0 2px 0 #2b1d08;
+    }
+
+    #btn-pause span {
+      display: block;
+      width: 6px;
+      height: 20px;
+      background-color: #2b1d08;
+      border-radius: 2px;
+    }
+
+    /* Bloque central: Insignia verde de multiplicador (x1) + Cápsula de Puntaje */
+    #hud-center {
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    #hud-multiplier {
+      position: relative;
+      z-index: 2;
+      margin-right: -12px;
+      padding: 4px 11px;
+      font-size: 24px;
+      font-weight: 900;
+      font-style: italic;
+      color: #b8ff3b;
+      background: linear-gradient(180deg, #43b02a 0%, #1c6e12 100%);
+      border: 3px solid #101810;
+      border-radius: 12px;
+      text-shadow: 0 2px 0 #0b2408, -1px -1px 0 #0b2408, 1px -1px 0 #0b2408;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+      transform: rotate(-6deg);
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s;
+    }
+
+    #hud-multiplier.boosted {
+      color: #fff66b;
+      background: linear-gradient(180deg, #ff8800 0%, #cc2900 100%);
+      transform: rotate(-6deg) scale(1.12);
+    }
+
+    #hud-score-pill {
+      background: rgba(24, 28, 36, 0.82);
+      backdrop-filter: blur(6px);
+      border: 2px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+      padding: 6px 26px 6px 24px;
+      min-width: 145px;
+      text-align: center;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+
+    #hud-score {
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Bloque derecho: Cápsula oscura con moneda estrella + contador */
+    #hud-coins-pill {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      background: rgba(24, 28, 36, 0.82);
+      backdrop-filter: blur(6px);
+      border: 2px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+      padding: 5px 16px 5px 8px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+
+    .coin-badge-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #fff275 0%, #ffc800 55%, #d98200 100%);
+      border: 2px solid #593300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #8f4f00;
+      font-size: 16px;
+      font-weight: 900;
+      box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.25);
+    }
+
+    #hud-coins {
+      color: #ffffff;
+      font-size: 21px;
+      font-weight: 900;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+    }
+
+    /* ==========================================================================
+       INDICADORES DE POWER-UPS ACTIVOS Y BOTÓN DE HOVERBOARD
+       ========================================================================== */
+    #powerups-bar {
+      position: fixed;
+      left: 16px;
+      bottom: max(20px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .powerup-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(18, 24, 34, 0.85);
+      backdrop-filter: blur(6px);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 6px 10px;
+      width: 168px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+      animation: popIn 0.2s ease-out;
+    }
+
+    .powerup-icon {
+      font-size: 18px;
+      width: 24px;
+      text-align: center;
+    }
+
+    .powerup-info {
+      flex: 1;
+    }
+
+    .powerup-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+
+    .powerup-track {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .powerup-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.08s linear;
+    }
+
+    /* Botón rápido de Hoverboard abajo a la derecha */
+    #btn-hoverboard {
+      position: fixed;
+      right: 18px;
+      bottom: max(22px, env(safe-area-inset-bottom));
+      z-index: 20;
+      width: 62px;
+      height: 62px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #38f2ff 0%, #0088cc 100%);
+      border: 3px solid #ffffff;
+      box-shadow: 0 6px 18px rgba(0, 180, 255, 0.55);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.12s ease, opacity 0.2s ease;
+    }
+
+    #btn-hoverboard:active {
+      transform: scale(0.92);
+    }
+
+    #btn-hoverboard.cooldown {
+      opacity: 0.45;
+      filter: grayscale(0.7);
+    }
+
+    #btn-hoverboard .hb-emoji {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    #btn-hoverboard .hb-key {
+      font-size: 10px;
+      font-weight: 900;
+      margin-top: 2px;
+      background: rgba(0, 0, 0, 0.45);
+      padding: 1px 5px;
+      border-radius: 6px;
+    }
+
+    /* Aviso flotante de eventos (Tropiezo, Escudo, Energía) */
+    #toast-banner {
+      position: fixed;
+      top: 84px;
+      left: 50%;
+      transform: translateX(-50%) scale(0.9);
+      z-index: 25;
+      padding: 7px 18px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: #fff;
+      background: rgba(20, 25, 36, 0.88);
+      border: 2px solid #38f2ff;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    #toast-banner.visible {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+
+    /* ==========================================================================
+       PANTALLAS SUPERPUESTAS (TÍTULO, PAUSA, GAME OVER)
+       ========================================================================== */
+    .overlay-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: radial-gradient(circle at center, rgba(16, 24, 38, 0.35) 0%, rgba(10, 15, 26, 0.78) 100%);
+      backdrop-filter: blur(5px);
+      transition: opacity 0.25s ease;
+    }
+
+    .overlay-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .card-panel {
+      width: 100%;
+      max-width: 420px;
+      background: linear-gradient(180deg, rgba(28, 37, 54, 0.94) 0%, rgba(17, 23, 35, 0.96) 100%);
+      border: 3px solid rgba(255, 255, 255, 0.18);
+      border-radius: 26px;
+      padding: 26px 24px;
+      text-align: center;
+      color: #ffffff;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+    }
+
+    .game-logo {
+      font-size: clamp(32px, 7vw, 44px);
+      font-weight: 900;
+      font-style: italic;
+      line-height: 0.95;
+      letter-spacing: -1px;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, #fff566 0%, #ff9900 55%, #ff3b00 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 4px 0 #1b0e00);
+      margin-bottom: 6px;
+    }
+
+    .city-tag {
+      display: inline-block;
+      background: #1a7a3e;
+      color: #ffffff;
+      border: 2px solid #ffffff;
+      border-radius: 8px;
+      padding: 3px 14px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+      margin-bottom: 18px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 10px 8px;
+    }
+
+    .stat-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #9bb0cc;
+      letter-spacing: 0.6px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 900;
+      color: #ffffff;
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-value.gold {
+      color: #ffd53d;
+    }
+
+    .controls-hint {
+      background: rgba(0, 0, 0, 0.28);
+      border-radius: 14px;
+      padding: 10px 12px;
+      margin-bottom: 20px;
+      font-size: 12px;
+      color: #cbd8ea;
+      line-height: 1.5;
+    }
+
+    .controls-hint strong {
+      color: #5ce6ff;
+    }
+
+    .btn-arcade {
+      width: 100%;
+      padding: 15px 20px;
+      border-radius: 16px;
+      border: 3px solid #14290a;
+      background: linear-gradient(180deg, #7be835 0%, #3aa814 100%);
+      color: #ffffff;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      text-shadow: 0 2px 0 #184207;
+      box-shadow: 0 5px 0 #184207, 0 10px 20px rgba(0, 0, 0, 0.45);
+      cursor: pointer;
+      transition: transform 0.1s ease, filter 0.15s ease;
+    }
+
+    .btn-arcade:hover {
+      filter: brightness(1.06);
+    }
+
+    .btn-arcade:active {
+      transform: translateY(3px);
+      box-shadow: 0 2px 0 #184207;
+    }
+
+    .btn-secondary {
+      width: 100%;
+      padding: 12px 18px;
+      margin-top: 10px;
+      border-radius: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .record-badge {
+      display: inline-block;
+      background: linear-gradient(90deg, #ff9900, #ff3d00);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+      letter-spacing: 0.8px;
+      animation: pulseBadge 1s infinite alternate;
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.8); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes pulseBadge {
+      from { transform: scale(1); }
+      to { transform: scale(1.07); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Lienzo WebGL 3D Responsivo -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Efectos de pantalla -->
+  <div id="speed-streaks"></div>
+  <div id="screen-flash"></div>
+  <div id="toast-banner"></div>
+
+  <!-- HUD en Carrera (Disposición idéntica a la imagen de referencia) -->
+  <header id="hud" aria-label="Indicadores de partida">
+    <button id="btn-pause" type="button" aria-label="Pausar juego" title="Pausar (P / Esc)">
+      <span></span>
+      <span></span>
+    </button>
+
+    <div id="hud-center">
+      <div id="hud-multiplier">x1</div>
+      <div id="hud-score-pill">
+        <div id="hud-score">000000</div>
+      </div>
+    </div>
+
+    <div id="hud-coins-pill">
+      <div class="coin-badge-icon">★</div>
+      <div id="hud-coins">0</div>
+    </div>
+  </header>
+
+  <!-- Barra de Power-Ups Activos -->
+  <div id="powerups-bar"></div>
+
+  <!-- Botón táctil / acceso directo de Hoverboard -->
+  <button id="btn-hoverboard" type="button" aria-label="Activar Hoverboard" title="Hoverboard (Doble Toque o H)">
+    <span class="hb-emoji">🛹</span>
+    <span class="hb-key">H / 2xTAP</span>
+  </button>
+
+  <!-- Pantalla de Título -->
+  <section id="screen-title" class="overlay-screen">
+    <div class="card-panel">
+      <h1 class="game-logo">SUBWAY<br>SURFER 3D</h1>
+      <div class="city-tag">SUBWAY CITY</div>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-title">Récord Máximo</div>
+          <div id="title-best-score" class="stat-value">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-title">Banco de Monedas</div>
+          <div id="title-bank-coins" class="stat-value gold">0</div>
+        </div>
+      </div>
+
+      <div class="controls-hint">
+        <strong>Deslizar / Flechas / WASD:</strong> Mover, Saltar y Rodar<br>
+        <strong>Doble Toque / Tecla H:</strong> Escudo Hoverboard<br>
+        <strong>Fichas ⚡:</strong> Impulso energético y puntos extra
+      </div>
+
+      <button id="btn-start" class="btn-arcade" type="button">JUGAR</button>
+      <button id="btn-toggle-audio-title" class="btn-secondary" type="button">🔊 Sonido: ACTIVADO</button>
+    </div>
+  </section>
+
+  <!-- Pantalla de Pausa -->
+  <section id="screen-pause" class="overlay-screen hidden">
+    <div class="card-panel">
+      <h2 class="game-logo" style="font-size: 34px; margin-bottom: 14px;">PAUSA</h2>
+      <p style="color: #b4c6df; font-size: 14px; margin-bottom: 20px;">
+        ¡El Inspector de Subway City sigue tras tus pasos!
+      </p>
+      <button id="btn-resume" class="btn-arcade" type="button">CONTINUAR</button>
+      <button id="btn-toggle-audio-pause" class="btn-secondary" type="button">🔊 Sonido: ACTIVADO</button>
+      <button id="btn-restart-pause" class="btn-secondary" type="button">🔄 Reiniciar Carrera</button>
+    </div>
+  </section>
+
+  <!-- Pantalla de Resultados (Game Over) -->
+  <section id="screen-gameover" class="overlay-screen hidden">
+    <div class="card-panel">
+      <div id="new-record-badge" class="record-badge" style="display: none;">★ ¡NUEVO RÉCORD HISTÓRICO! ★</div>
+      <h2 class="game-logo" style="font-size: 34px; margin-bottom: 14px;">¡ATRAPADO!</h2>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-title">Puntaje Final</div>
+          <div id="go-score" class="stat-value">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-title">Récord Máximo</div>
+          <div id="go-best" class="stat-value gold">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-title">Distancia</div>
+          <div id="go-distance" class="stat-value">0 m</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-title">Monedas</div>
+          <div id="go-coins" class="stat-value gold">+0</div>
+        </div>
+      </div>
+
+      <button id="btn-retry" class="btn-arcade" type="button">JUGAR DE NUEVO</button>
+    </div>
+  </section>
+
+  <script>
+    /**
+     * ============================================================================
+     * SUBWAY SURFER 3D (SUBWAY CITY)
+     * Motor WebGL 3D Endless Runner Procedimental con Three.js + Web Audio API
+     * ============================================================================
+     */
+
+    // ============================================================================
+    // 1. CONSTANTES CINEMÁTICAS Y FÍSICAS (ESPECIFICACIONES NOTEBOOKLM)
+    // ============================================================================
+    const PHYSICS = {
+      LANE_WIDTH: 2.75,              // Distancia entre centros de carriles (-2.75, 0, +2.75)
+      LANE_SWITCH_DURATION: 0.15,    // Cambio de carril suavizado en 0.15 s
+      BASE_SPEED: 22.0,              // Velocidad inicial (m/s)
+      MAX_SPEED: 54.0,               // Velocidad máxima (m/s)
+      ACCELERATION: 0.5,             // Aceleración longitudinal progresiva (m/s^2)
+      JUMP_VELOCITY: 15.0,           // Impulso vertical de salto estándar (m/s)
+      SUPER_JUMP_VELOCITY: 21.0,     // Impulso con Super Sneakers (altura máx = 6.125 m)
+      GRAVITY: 36.0,                 // Gravedad estándar (m/s^2)
+      FAST_FALL_GRAVITY: 105.0,      // Gravedad acelerada al deslizar hacia abajo en el aire
+      ROLL_DURATION: 0.65,           // Duración de rodadura/deslizamiento (s)
+      TRAIN_HEIGHT: 4.5,             // Altura estándar de vagones y trenes (m)
+      TRAIN_LENGTH: 18.0,            // Longitud de cada vagón/tren (m)
+      MOVING_TRAIN_SPEED_MULT: 0.6,  // Trenes móviles avanzan a 0.6x de la velocidad del jugador
+      MOVING_TRAIN_TRIGGER_DIST: 70, // Se activan cuando están a <= 70 m
+      CHUNK_LENGTH: 30.0,            // Longitud de cada tramo reciclable (m)
+      ACTIVE_CHUNKS: 21,             // 21 x 30m = 630m de horizonte activo sin brechas
+      STUMBLE_WINDOW: 6.0,           // 2 impactos dentro de 6.0s -> captura por el Inspector
+      JUMP_BUFFER_TIME: 0.16,        // Amortiguación de salto pulsado antes de aterrizar
+      COYOTE_TIME: 0.14              // Tiempo de gracia al salir del borde de un tren
+    };
+
+    // ============================================================================
+    // 2. GENERADOR DE TEXTURAS PROCEDIMENTALES (CANVAS 2D -> THREE.CANVASTEXTURE)
+    // ============================================================================
+    class ProceduralTextures {
+      static createAll() {
+        return {
+          trackBed: this.makeTrackBed(),
+          brickWall: this.makeBrickGraffitiWall(),
+          silverTrainSide: this.makeSilverTrainSide(),
+          silverTrainRoof: this.makeSilverTrainRoof(),
+          redCargoSide: this.makeRedCargoSide(),
+          barricade: this.makeBarricade(),
+          hurdle: this.makeHurdle(),
+          citySign: this.makeCitySign(),
+          arrowSign: this.makeArrowSign(),
+          coinFace: this.makeCoinFace(),
+          energyFace: this.makeEnergyFace(),
+          buildingFacade: this.makeBuildingFacade()
+        };
+      }
+
+      static makeCanvas(w, h) {
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        return { canvas: c, ctx: c.getContext('2d') };
+      }
+
+      // Balasto de grava, durmientes de madera y 3 pares de rieles metálicos
+      static makeTrackBed() {
+        const { canvas, ctx } = this.makeCanvas(512, 512);
+        // Fondo grava marrón/grisácea
+        ctx.fillStyle = '#4e463f';
+        ctx.fillRect(0, 0, 512, 512);
+
+        // Textura granulada de piedras
+        for (let i = 0; i < 4500; i++) {
+          const x = Math.random() * 512;
+          const y = Math.random() * 512;
+          const v = 55 + Math.floor(Math.random() * 55);
+          ctx.fillStyle = `rgb(${v + 12}, ${v + 4}, ${v - 4})`;
+          ctx.fillRect(x, y, 3, 3);
+        }
+
+        // Durmientes transversales de madera por cada uno de los 3 carriles
+        const laneCenters = [106, 256, 406];
+        for (let y = 8; y < 512; y += 32) {
+          for (const cx of laneCenters) {
+            ctx.fillStyle = '#332218';
+            ctx.fillRect(cx - 56, y, 112, 16);
+            ctx.fillStyle = '#4a3324';
+            ctx.fillRect(cx - 54, y + 2, 108, 5);
+          }
+        }
+
+        // Rieles metálicos brillantes con sombra
+        for (const cx of laneCenters) {
+          for (const offset of [-34, 34]) {
+            ctx.fillStyle = '#1d2229';
+            ctx.fillRect(cx + offset - 6, 0, 12, 512);
+            ctx.fillStyle = '#cfd9e6';
+            ctx.fillRect(cx + offset - 3, 0, 6, 512);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(cx + offset - 1, 0, 2, 512);
+          }
+        }
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(1, 3);
+        tex.anisotropy = 4;
+        return tex;
+      }
+
+      // Muro de contención de ladrillo/concreto con arte grafiti ("WEVER UP!!")
+      static makeBrickGraffitiWall() {
+        const { canvas, ctx } = this.makeCanvas(512, 256);
+        // Base de concreto/ladrillo urbano
+        ctx.fillStyle = '#5a5666';
+        ctx.fillRect(0, 0, 512, 256);
+
+        // Hileras de ladrillos sutiles
+        ctx.fillStyle = '#4a4654';
+        for (let row = 0; row < 16; row++) {
+          const y = row * 16;
+          ctx.fillRect(0, y, 512, 2);
+          const shift = (row % 2) * 24;
+          for (let col = 0; col < 12; col++) {
+            ctx.fillRect(col * 48 + shift, y, 2, 16);
+          }
+        }
+
+        // Salpicaduras y manchas urbanas
+        const sprayColors = ['#ff3b6b', '#00e5ff', '#ffe600', '#76ff03', '#ff9100'];
+        for (let i = 0; i < 6; i++) {
+          ctx.fillStyle = sprayColors[i % sprayColors.length];
+          ctx.globalAlpha = 0.25;
+          ctx.beginPath();
+          ctx.arc(60 + i * 80, 140 + (i % 2) * 30, 38, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        // Pieza de grafiti estilizado "WEVER UP!!" como en la referencia
+        ctx.save();
+        ctx.translate(256, 138);
+        ctx.rotate(-0.04);
+        ctx.font = '900 44px Impact, Arial Black, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = '#15121e';
+        ctx.strokeText('WEVER UP!!', 0, 0);
+        const grad = ctx.createLinearGradient(-120, -30, 120, 15);
+        grad.addColorStop(0, '#ffde22');
+        grad.addColorStop(0.5, '#ff4d94');
+        grad.addColorStop(1, '#29f2ff');
+        ctx.fillStyle = grad;
+        ctx.fillText('WEVER UP!!', 0, 0);
+        ctx.restore();
+
+        // Cornisa superior de piedra
+        ctx.fillStyle = '#736f82';
+        ctx.fillRect(0, 0, 512, 24);
+        ctx.fillStyle = '#383442';
+        ctx.fillRect(0, 24, 512, 6);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        return tex;
+      }
+
+      // Lateral de tren de pasajeros plateado con ventanas oscuras y franja azul/roja
+      static makeSilverTrainSide() {
+        const { canvas, ctx } = this.makeCanvas(512, 256);
+        const grad = ctx.createLinearGradient(0, 0, 0, 256);
+        grad.addColorStop(0, '#eef3f8');
+        grad.addColorStop(0.5, '#c4cdd6');
+        grad.addColorStop(1, '#8d98a5');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 512, 256);
+
+        // Franja decorativa lateral
+        ctx.fillStyle = '#1f5aa6';
+        ctx.fillRect(0, 136, 512, 18);
+        ctx.fillStyle = '#e63946';
+        ctx.fillRect(0, 154, 512, 7);
+
+        // Ventanas oscuras redondeadas y puertas
+        for (let i = 0; i < 4; i++) {
+          const x = 24 + i * 122;
+          ctx.fillStyle = '#18222f';
+          ctx.beginPath();
+          ctx.roundRect(x, 38, 86, 78, 12);
+          ctx.fill();
+          ctx.strokeStyle = '#536070';
+          ctx.lineWidth = 4;
+          ctx.stroke();
+
+          // Reflejo diagonal en cristal
+          ctx.fillStyle = 'rgba(255,255,255,0.16)';
+          ctx.beginPath();
+          ctx.moveTo(x + 12, 44);
+          ctx.lineTo(x + 34, 44);
+          ctx.lineTo(x + 16, 110);
+          ctx.lineTo(x + 4, 110);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        // Líneas corrugadas inferiores
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        for (let y = 172; y < 245; y += 10) {
+          ctx.fillRect(0, y, 512, 3);
+        }
+
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // Techo metálico acanalado de los trenes
+      static makeSilverTrainRoof() {
+        const { canvas, ctx } = this.makeCanvas(256, 512);
+        ctx.fillStyle = '#d3dce6';
+        ctx.fillRect(0, 0, 256, 512);
+
+        // Acanalado longitudinal
+        for (let x = 16; x < 256; x += 24) {
+          ctx.fillStyle = '#aeb9c7';
+          ctx.fillRect(x, 0, 8, 512);
+          ctx.fillStyle = '#f4f8fc';
+          ctx.fillRect(x + 8, 0, 4, 512);
+        }
+
+        // Unidades de aire acondicionado en el techo
+        ctx.fillStyle = '#9aa6b5';
+        ctx.fillRect(48, 80, 160, 70);
+        ctx.strokeStyle = '#6c7785';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(48, 80, 160, 70);
+
+        ctx.fillRect(48, 340, 160, 70);
+        ctx.strokeRect(48, 340, 160, 70);
+
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // Vagón de carga rojo óxido corrugado con grafitis laterales
+      static makeRedCargoSide() {
+        const { canvas, ctx } = this.makeCanvas(512, 256);
+        ctx.fillStyle = '#9e2a22';
+        ctx.fillRect(0, 0, 512, 256);
+
+        // Paneles verticales corrugados
+        for (let x = 0; x < 512; x += 16) {
+          ctx.fillStyle = '#7a1d17';
+          ctx.fillRect(x, 18, 6, 220);
+          ctx.fillStyle = '#ba382f';
+          ctx.fillRect(x + 6, 18, 4, 220);
+        }
+
+        // Marcos estructurales
+        ctx.fillStyle = '#631611';
+        ctx.fillRect(0, 0, 512, 18);
+        ctx.fillRect(0, 238, 512, 18);
+        ctx.fillRect(246, 0, 20, 256);
+
+        // Grafiti callejero en el vagón
+        ctx.save();
+        ctx.translate(135, 145);
+        ctx.rotate(-0.08);
+        ctx.font = '900 36px Impact, sans-serif';
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 6;
+        ctx.strokeText('SUBWAY', 0, 0);
+        ctx.fillStyle = '#38f2ff';
+        ctx.fillText('SUBWAY', 0, 0);
+        ctx.restore();
+
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // Barricada roja y blanca con "X" blanca central (como en la referencia)
+      static makeBarricade() {
+        const { canvas, ctx } = this.makeCanvas(256, 256);
+        // Marco blanco
+        ctx.fillStyle = '#f2f4f8';
+        ctx.fillRect(0, 0, 256, 256);
+
+        // Panel interior rojo vibrante
+        ctx.fillStyle = '#d92626';
+        ctx.fillRect(18, 28, 220, 200);
+
+        // Gran "X" blanca central
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 34;
+        ctx.lineCap = 'square';
+        ctx.beginPath();
+        ctx.moveTo(56, 62);
+        ctx.lineTo(200, 194);
+        ctx.moveTo(200, 62);
+        ctx.lineTo(56, 194);
+        ctx.stroke();
+
+        // Franja superior e inferior de precaución
+        ctx.fillStyle = '#d92626';
+        ctx.fillRect(0, 0, 256, 16);
+        ctx.fillRect(0, 240, 256, 16);
+
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // Valla alta para deslizarse por debajo
+      static makeHurdle() {
+        const { canvas, ctx } = this.makeCanvas(256, 128);
+        ctx.fillStyle = '#ffb703';
+        ctx.fillRect(0, 0, 256, 128);
+
+        // Franjas diagonales negras de peligro
+        ctx.fillStyle = '#1d1e22';
+        for (let x = -128; x < 384; x += 48) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x + 24, 0);
+          ctx.lineTo(x - 40, 128);
+          ctx.lineTo(x - 64, 128);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(4, 4, 248, 120);
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // Cartel verde vial "SUBWAY CITY"
+      static makeCitySign() {
+        const { canvas, ctx } = this.makeCanvas(512, 160);
+        ctx.fillStyle = '#1b7a43';
+        ctx.beginPath();
+        ctx.roundRect(6, 6, 500, 148, 16);
+        ctx.fill();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 10;
+        ctx.beginPath();
+        ctx.roundRect(14, 14, 484, 132, 12);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 58px Arial Black, Impact, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('SUBWAY CITY', 256, 82);
+
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // Señal cuadrada con flecha diagonal apuntando abajo-izquierda
+      static makeArrowSign() {
+        const { canvas, ctx } = this.makeCanvas(128, 128);
+        ctx.fillStyle = '#1b7a43';
+        ctx.beginPath();
+        ctx.roundRect(4, 4, 120, 120, 14);
+        ctx.fill();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.roundRect(10, 10, 108, 108, 10);
+        ctx.stroke();
+
+        // Flecha diagonal blanca
+        ctx.save();
+        ctx.translate(64, 64);
+        ctx.rotate((3 * Math.PI) / 4);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-26, -8, 34, 16);
+        ctx.beginPath();
+        ctx.moveTo(30, 0);
+        ctx.lineTo(6, -22);
+        ctx.lineTo(6, 22);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // Cara de moneda dorada con estrella en relieve
+      static makeCoinFace() {
+        const { canvas, ctx } = this.makeCanvas(128, 128);
+        const grad = ctx.createRadialGradient(48, 42, 10, 64, 64, 60);
+        grad.addColorStop(0, '#fff799');
+        grad.addColorStop(0.55, '#ffd000');
+        grad.addColorStop(1, '#d47f00');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 128, 128);
+
+        // Aro interior
+        ctx.strokeStyle = '#b56500';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(64, 64, 48, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Estrella de 5 puntas
+        ctx.fillStyle = '#fff066';
+        ctx.strokeStyle = '#9e5400';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const r = i % 2 === 0 ? 30 : 13;
+          const a = (i * Math.PI) / 5 - Math.PI / 2;
+          const x = 64 + Math.cos(a) * r;
+          const y = 64 + Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // Cara de ficha azul eléctrica con rayo
+      static makeEnergyFace() {
+        const { canvas, ctx } = this.makeCanvas(128, 128);
+        const grad = ctx.createRadialGradient(48, 44, 8, 64, 64, 60);
+        grad.addColorStop(0, '#b8f7ff');
+        grad.addColorStop(0.5, '#00b4ff');
+        grad.addColorStop(1, '#0048b8');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 128, 128);
+
+        ctx.strokeStyle = '#80ecff';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(64, 64, 48, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Rayo central blanco brillante
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(72, 26);
+        ctx.lineTo(42, 68);
+        ctx.lineTo(62, 68);
+        ctx.lineTo(54, 102);
+        ctx.lineTo(86, 58);
+        ctx.lineTo(66, 58);
+        ctx.closePath();
+        ctx.fill();
+
+        return new THREE.CanvasTexture(canvas);
+      }
+
+      // Fachada de edificios urbanos del fondo
+      static makeBuildingFacade() {
+        const { canvas, ctx } = this.makeCanvas(128, 256);
+        ctx.fillStyle = '#b86b52';
+        ctx.fillRect(0, 0, 128, 256);
+
+        for (let y = 20; y < 230; y += 36) {
+          for (let x = 16; x < 105; x += 34) {
+            ctx.fillStyle = '#3c4a5e';
+            ctx.fillRect(x, y, 22, 24);
+            ctx.strokeStyle = '#e6d5c3';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, 22, 24);
+          }
+        }
+        return new THREE.CanvasTexture(canvas);
+      }
+    }
+
+    // ============================================================================
+    // 3. MOTOR DE AUDIO PROCEDIMENTAL (100% WEB AUDIO API, CERO ARCHIVOS)
+    // ============================================================================
+    class ProceduralAudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+        this.coinStreak = 0;
+        this.lastCoinTime = 0;
+        this.beatTimer = 0;
+        this.beatStep = 0;
+      }
+
+      unlock() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) {
+            this.ctx = new AudioCtx();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      toggleMute() {
+        this.muted = !this.muted;
+        return this.muted;
+      }
+
+      playTone(freq, endFreq, duration, type = 'sine', volume = 0.15, delay = 0) {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime + delay;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        if (endFreq !== null) {
+          osc.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), now + duration);
+        }
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.linearRampToValueAtTime(volume, now + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + duration + 0.02);
+      }
+
+      playDodge() {
+        this.playTone(220, 480, 0.11, 'triangle', 0.12);
+      }
+
+      playJump(isSuper = false) {
+        if (isSuper) {
+          this.playTone(260, 780, 0.24, 'sawtooth', 0.13);
+          this.playTone(520, 1040, 0.22, 'sine', 0.11, 0.04);
+        } else {
+          this.playTone(210, 560, 0.18, 'sine', 0.15);
+        }
+      }
+
+      playRoll() {
+        this.playTone(340, 110, 0.18, 'triangle', 0.14);
+      }
+
+      playCoin() {
+        if (this.muted || !this.ctx) return;
+        const now = performance.now();
+        if (now - this.lastCoinTime < 450) {
+          this.coinStreak = Math.min(this.coinStreak + 1, 14);
+        } else {
+          this.coinStreak = 0;
+        }
+        this.lastCoinTime = now;
+        const baseFreq = 880 * Math.pow(1.035, this.coinStreak);
+        this.playTone(baseFreq, baseFreq * 1.25, 0.09, 'sine', 0.11);
+        this.playTone(baseFreq * 1.5, baseFreq * 1.5, 0.12, 'triangle', 0.07, 0.045);
+      }
+
+      playEnergyToken() {
+        this.playTone(520, 1040, 0.14, 'sawtooth', 0.13);
+        this.playTone(780, 1560, 0.18, 'sine', 0.14, 0.06);
+      }
+
+      playPowerup() {
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((n, idx) => {
+          this.playTone(n, n * 1.02, 0.14, 'triangle', 0.13, idx * 0.055);
+        });
+      }
+
+      playHoverboard() {
+        this.playTone(180, 620, 0.26, 'sawtooth', 0.14);
+        this.playTone(360, 920, 0.26, 'sine', 0.12);
+      }
+
+      playShieldBreak() {
+        this.playTone(440, 90, 0.35, 'sawtooth', 0.22);
+        this.playTone(620, 140, 0.30, 'square', 0.15);
+      }
+
+      playStumble() {
+        this.playTone(170, 65, 0.25, 'sawtooth', 0.20);
+        this.playTone(900, 320, 0.08, 'square', 0.08);
+      }
+
+      playTrainHorn() {
+        this.playTone(185, 175, 0.42, 'sawtooth', 0.11);
+        this.playTone(233, 222, 0.42, 'sawtooth', 0.09);
+      }
+
+      playCrash() {
+        this.playTone(140, 38, 0.48, 'sawtooth', 0.25);
+        this.playTone(95, 32, 0.52, 'square', 0.20);
+      }
+
+      // Base rítmica sutil que acelera con la velocidad del jugador
+      updateMusic(dt, speed, isPlaying) {
+        if (this.muted || !this.ctx || !isPlaying) return;
+        const bpm = 118 + (speed - PHYSICS.BASE_SPEED) * 1.15;
+        const stepInterval = 60 / bpm / 2; // Corcheas
+        this.beatTimer += dt;
+        if (this.beatTimer >= stepInterval) {
+          this.beatTimer -= stepInterval;
+          const bassNotes = [110, 110, 130.81, 146.83, 110, 110, 164.81, 146.83];
+          const note = bassNotes[this.beatStep % bassNotes.length];
+          if (this.beatStep % 2 === 0) {
+            this.playTone(note, note * 0.96, 0.11, 'triangle', 0.055);
+          } else {
+            this.playTone(1400, 400, 0.03, 'sine', 0.02);
+          }
+          this.beatStep++;
+        }
+      }
+    }
+
+    // ============================================================================
+    // 4. CONSTRUCCIÓN DE MODELOS 3D ARTICULADOS (CORREDOR E INSPECTOR)
+    // ============================================================================
+    function createRunnerCharacter() {
+      const root = new THREE.Group();
+
+      // Materiales fieles a la vestimenta de la imagen de referencia:
+      // Sudadera gris claro con capucha, chaleco azul con emblema dorado, jeans azules y tenis rosa/púrpura
+      const hoodieMat = new THREE.MeshStandardMaterial({ color: 0xd9dde6, roughness: 0.7 });
+      const vestMat = new THREE.MeshStandardMaterial({ color: 0x24569c, roughness: 0.65 });
+      const emblemMat = new THREE.MeshStandardMaterial({ color: 0xffc824, metalness: 0.4, roughness: 0.3 });
+      const jeansMat = new THREE.MeshStandardMaterial({ color: 0x2b508a, roughness: 0.75 });
+      const cuffMat = new THREE.MeshStandardMaterial({ color: 0x8ea9d1, roughness: 0.8 });
+      const shoeMat = new THREE.MeshStandardMaterial({ color: 0xc96b96, roughness: 0.5 });
+      const soleMat = new THREE.MeshStandardMaterial({ color: 0xf4f6fa, roughness: 0.4 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xf2c19d, roughness: 0.6 });
+
+      // Grupo principal del cuerpo (para agachar/rodar e inclinar)
+      const bodyPivot = new THREE.Group();
+      bodyPivot.position.y = 1.05;
+      root.add(bodyPivot);
+
+      // Torso (chaleco azul)
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.82, 0.40), vestMat);
+      torso.position.y = 0.38;
+      torso.castShadow = true;
+      bodyPivot.add(torso);
+
+      // Emblema dorado en la espalda (visible en vista tercera persona)
+      const backEmblem = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.05), emblemMat);
+      backEmblem.position.set(0, 0.45, 0.21);
+      bodyPivot.add(backEmblem);
+
+      // Capucha caída en la nuca + cabeza encapuchada gris claro
+      const headGroup = new THREE.Group();
+      headGroup.position.set(0, 0.96, 0);
+      bodyPivot.add(headGroup);
+
+      const hoodMesh = new THREE.Mesh(new THREE.SphereGeometry(0.34, 18, 16), hoodieMat);
+      hoodMesh.scale.set(0.95, 1.05, 1.02);
+      hoodMesh.castShadow = true;
+      headGroup.add(hoodMesh);
+
+      const faceVisor = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 12), skinMat);
+      faceVisor.position.set(0, -0.02, -0.14);
+      headGroup.add(faceVisor);
+
+      // Brazos (mangas gris claro de la sudadera)
+      function makeArm(side) {
+        const armPivot = new THREE.Group();
+        armPivot.position.set(side * 0.45, 0.72, 0);
+        const upper = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.58, 0.20), hoodieMat);
+        upper.position.y = -0.24;
+        upper.castShadow = true;
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 10), skinMat);
+        hand.position.y = -0.56;
+        armPivot.add(upper, hand);
+        bodyPivot.add(armPivot);
+        return armPivot;
+      }
+
+      const leftArm = makeArm(-1);
+      const rightArm = makeArm(1);
+
+      // Piernas (jeans azules, dobladillo claro y tenis rosa/púrpura con suela blanca)
+      function makeLeg(side) {
+        const legPivot = new THREE.Group();
+        legPivot.position.set(side * 0.19, 0.02, 0);
+
+        const pant = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.68, 0.26), jeansMat);
+        pant.position.y = -0.34;
+        pant.castShadow = true;
+        legPivot.add(pant);
+
+        const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.10, 0.28), cuffMat);
+        cuff.position.y = -0.68;
+        legPivot.add(cuff);
+
+        const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 0.42), shoeMat);
+        shoe.position.set(0, -0.80, -0.06);
+        shoe.castShadow = true;
+        legPivot.add(shoe);
+
+        const sole = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.07, 0.44), soleMat);
+        sole.position.set(0, -0.89, -0.06);
+        legPivot.add(sole);
+
+        bodyPivot.add(legPivot);
+        return { legPivot, shoe };
+      }
+
+      const leftLeg = makeLeg(-1);
+      const rightLeg = makeLeg(1);
+
+      // Tabla flotante Hoverboard (oculta hasta activarse)
+      const hoverboard = new THREE.Group();
+      hoverboard.position.set(0, 0.14, 0);
+      hoverboard.visible = false;
+      const boardDeck = new THREE.Mesh(
+        new THREE.BoxGeometry(0.85, 0.10, 1.95),
+        new THREE.MeshStandardMaterial({ color: 0x00d9ff, emissive: 0x0066aa, metalness: 0.5, roughness: 0.2 })
+      );
+      const boardGlow = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.15, 2.2),
+        new THREE.MeshBasicMaterial({ color: 0x38f2ff, transparent: true, opacity: 0.45, side: THREE.DoubleSide })
+      );
+      boardGlow.rotation.x = -Math.PI / 2;
+      boardGlow.position.y = -0.04;
+      hoverboard.add(boardDeck, boardGlow);
+      root.add(hoverboard);
+
+      // Jetpack dorsal (oculto hasta activarse)
+      const jetpack = new THREE.Group();
+      jetpack.position.set(0, 0.42, 0.28);
+      jetpack.visible = false;
+      const tankMat = new THREE.MeshStandardMaterial({ color: 0xff5500, metalness: 0.6, roughness: 0.3 });
+      const tankL = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.62, 12), tankMat);
+      tankL.position.x = -0.14;
+      const tankR = tankL.clone();
+      tankR.position.x = 0.14;
+      jetpack.add(tankL, tankR);
+      bodyPivot.add(jetpack);
+
+      // Aura energética cian detrás del personaje
+      const auraMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.75, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0x29e8ff, transparent: true, opacity: 0.18 })
+      );
+      auraMesh.position.set(0, 1.15, 0.2);
+      root.add(auraMesh);
+
+      return {
+        root,
+        bodyPivot,
+        headGroup,
+        leftArm,
+        rightArm,
+        leftLeg: leftLeg.legPivot,
+        rightLeg: rightLeg.legPivot,
+        leftShoe: leftLeg.shoe,
+        rightShoe: rightLeg.shoe,
+        hoverboard,
+        jetpack,
+        auraMesh,
+        shoeMat
+      };
+    }
+
+    // Inspector y perro perseguidor (visible tras un tropiezo)
+    function createChaserGroup() {
+      const group = new THREE.Group();
+      const copUniform = new THREE.MeshStandardMaterial({ color: 0x1b2b4b, roughness: 0.7 });
+      const capGold = new THREE.MeshStandardMaterial({ color: 0xffcc00, metalness: 0.5 });
+      const dogMat = new THREE.MeshStandardMaterial({ color: 0x6e472b, roughness: 0.8 });
+
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.76, 1.35, 0.46), copUniform);
+      guard.position.set(-0.35, 0.9, 0);
+      const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.2, 12), copUniform);
+      hat.position.set(-0.35, 1.72, 0);
+      const badge = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.06), capGold);
+      badge.position.set(-0.35, 1.72, -0.30);
+
+      const dog = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.72), dogMat);
+      dog.position.set(0.45, 0.35, -0.1);
+
+      group.add(guard, hat, badge, dog);
+      group.visible = false;
+      return group;
+    }
+
+    // ============================================================================
+    // 5. MOTOR PRINCIPAL DEL VIDEOJUEGO
+    // ============================================================================
+    class SubwaySurferGame {
+      constructor() {
+        this.canvas = document.getElementById('game-canvas');
+        this.audio = new ProceduralAudioEngine();
+        this.textures = ProceduralTextures.createAll();
+
+        // Persistencia local
+        this.bestScore = Number(localStorage.getItem('ss3d_best_score') || 0);
+        this.bankCoins = Number(localStorage.getItem('ss3d_bank_coins') || 0);
+
+        // Estados de aplicación: TITLE | PLAYING | PAUSED | GAME_OVER
+        this.state = 'TITLE';
+
+        // Estado cinemático del jugador
+        this.player = {
+          lane: 0,               // -1 (Izquierda), 0 (Centro), +1 (Derecha)
+          prevLane: 0,
+          x: 0,
+          laneStartX: 0,
+          laneTargetX: 0,
+          laneTimer: 1,
+          y: 0,
+          vy: 0,
+          groundY: 0,
+          isGrounded: true,
+          coyoteTimer: 0,
+          jumpBufferTimer: 0,
+          isRolling: false,
+          rollTimer: 0,
+          isFastFalling: false,
+          runCycle: 0
+        };
+
+        // Variables de partida
+        this.speed = PHYSICS.BASE_SPEED;
+        this.distance = 0;
+        this.score = 0;
+        this.coins = 0;
+        this.baseMultiplier = 1;
+        this.stumbleCount = 0;
+        this.stumbleWindowTimer = 0;
+        this.chaserVisibleTimer = 0;
+        this.invulnerableTimer = 0;
+        this.cameraShake = 0;
+        this.energySurgeTimer = 0;
+
+        // Power-ups activos (tiempo restante en segundos)
+        this.powerups = {
+          magnet: 0,
+          sneakers: 0,
+          doubleScore: 0,
+          hoverboard: 0,
+          jetpack: 0
+        };
+        this.hoverboardCooldown = 0;
+
+        // Pools y estructuras del mundo 3D
+        this.chunks = [];
+        this.obstacles = [];
+        this.collectibles = [];
+        this.particles = [];
+        this.nextChunkZ = 0;
+        this.chunkCounter = 0;
+
+        // Vectores reutilizables (Zero-GC)
+        this._tmpVec = new THREE.Vector3();
+
+        this.initThree();
+        this.initEnvironment();
+        this.initPools();
+        this.bindEvents();
+        this.updateUI();
+
+        // Posicionar mundo inicial idéntico a la vista de referencia
+        this.resetWorldForTitle();
+      }
+
+      initThree() {
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: this.canvas,
+          antialias: true,
+          powerPreference: 'high-performance'
+        });
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.08;
+
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x6ec3ff);
+        this.scene.fog = new THREE.FogExp2(0x88c9ff, 0.0042);
+
+        this.camera = new THREE.PerspectiveCamera(
+          60,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          450
+        );
+        this.camera.position.set(0, 6.2, 8.2);
+        this.camera.lookAt(0, 2.4, -18);
+
+        // Iluminación urbana brillante
+        const hemiLight = new THREE.HemisphereLight(0xdff4ff, 0x4b423c, 0.95);
+        this.scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xfff5db, 1.15);
+        dirLight.position.set(18, 34, 22);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 2;
+        dirLight.shadow.camera.far = 110;
+        const d = 26;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        this.scene.add(dirLight);
+      }
+
+      initEnvironment() {
+        // Personaje y perseguidor
+        this.runner = createRunnerCharacter();
+        this.scene.add(this.runner.root);
+
+        this.chaser = createChaserGroup();
+        this.scene.add(this.chaser);
+
+        // Materiales compartidos para Zero-GC
+        this.mats = {
+          track: new THREE.MeshStandardMaterial({ map: this.textures.trackBed, roughness: 0.9 }),
+          wall: new THREE.MeshStandardMaterial({ map: this.textures.brickWall, roughness: 0.85 }),
+          foliage: new THREE.MeshStandardMaterial({ color: 0x47a832, roughness: 0.75 }),
+          building: new THREE.MeshStandardMaterial({ map: this.textures.buildingFacade, roughness: 0.85 }),
+          silverSide: new THREE.MeshStandardMaterial({ map: this.textures.silverTrainSide, metalness: 0.35, roughness: 0.35 }),
+          silverRoof: new THREE.MeshStandardMaterial({ map: this.textures.silverTrainRoof, metalness: 0.4, roughness: 0.35 }),
+          trainFront: new THREE.MeshStandardMaterial({ color: 0x263140, metalness: 0.5, roughness: 0.3 }),
+          headlight: new THREE.MeshBasicMaterial({ color: 0xfff8b8 }),
+          redCargo: new THREE.MeshStandardMaterial({ map: this.textures.redCargoSide, roughness: 0.65 }),
+          ramp: new THREE.MeshStandardMaterial({ color: 0xd98a2b, roughness: 0.6 }),
+          barricade: new THREE.MeshStandardMaterial({ map: this.textures.barricade, roughness: 0.5 }),
+          metalCap: new THREE.MeshStandardMaterial({ color: 0xb8c2cc, metalness: 0.6, roughness: 0.3 }),
+          hurdle: new THREE.MeshStandardMaterial({ map: this.textures.hurdle, roughness: 0.5 }),
+          tunnelDark: new THREE.MeshBasicMaterial({ color: 0x0b0e14 }),
+          concreteOverpass: new THREE.MeshStandardMaterial({ color: 0x5c5869, roughness: 0.85 }),
+          citySign: new THREE.MeshBasicMaterial({ map: this.textures.citySign }),
+          arrowSign: new THREE.MeshBasicMaterial({ map: this.textures.arrowSign }),
+          coinRim: new THREE.MeshStandardMaterial({ color: 0xffb700, metalness: 0.6, roughness: 0.25 }),
+          coinFace: new THREE.MeshStandardMaterial({ map: this.textures.coinFace, metalness: 0.4, roughness: 0.25 }),
+          energyRim: new THREE.MeshStandardMaterial({ color: 0x0088ff, emissive: 0x0044aa, roughness: 0.2 }),
+          energyFace: new THREE.MeshBasicMaterial({ map: this.textures.energyFace }),
+          puMagnet: new THREE.MeshStandardMaterial({ color: 0xff2a55, emissive: 0x660018 }),
+          puSneakers: new THREE.MeshStandardMaterial({ color: 0x39ff14, emissive: 0x0f5c00 }),
+          puDouble: new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0x663300 }),
+          puJetpack: new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x005577 })
+        };
+
+        // Crear los 21 tramos de vía reciclables (630 m)
+        const trackGeo = new THREE.PlaneGeometry(11.6, PHYSICS.CHUNK_LENGTH);
+        const wallGeo = new THREE.BoxGeometry(1.4, 7.2, PHYSICS.CHUNK_LENGTH);
+        const bushGeo = new THREE.SphereGeometry(1.6, 10, 8);
+        const bldGeo = new THREE.BoxGeometry(7, 18, 9);
+
+        for (let i = 0; i < PHYSICS.ACTIVE_CHUNKS; i++) {
+          const chunk = new THREE.Group();
+
+          const floor = new THREE.Mesh(trackGeo, this.mats.track);
+          floor.rotation.x = -Math.PI / 2;
+          floor.receiveShadow = true;
+          chunk.add(floor);
+
+          const leftWall = new THREE.Mesh(wallGeo, this.mats.wall);
+          leftWall.position.set(-6.4, 3.6, 0);
+          leftWall.receiveShadow = true;
+          chunk.add(leftWall);
+
+          const rightWall = new THREE.Mesh(wallGeo, this.mats.wall);
+          rightWall.position.set(6.4, 3.6, 0);
+          rightWall.receiveShadow = true;
+          chunk.add(rightWall);
+
+          // Vegetación frondosa colgando sobre los muros (como en la imagen)
+          for (let side of [-1, 1]) {
+            const bush1 = new THREE.Mesh(bushGeo, this.mats.foliage);
+            bush1.position.set(side * 6.3, 7.4, -7);
+            bush1.scale.set(1.3, 0.85, 1.8);
+            const bush2 = new THREE.Mesh(bushGeo, this.mats.foliage);
+            bush2.position.set(side * 6.5, 7.2, 8);
+            bush2.scale.set(1.2, 0.8, 1.6);
+            chunk.add(bush1, bush2);
+
+            // Edificios urbanos detrás de los muros
+            if (i % 2 === 0) {
+              const bld = new THREE.Mesh(bldGeo, this.mats.building);
+              bld.position.set(side * 12.2, 11.5, 0);
+              chunk.add(bld);
+            }
+          }
+
+          // Paso elevado y cartel "SUBWAY CITY" (cada 15 tramos = 450m y en el tramo inicial)
+          const overpass = this.buildSubwayCityOverpass();
+          overpass.visible = false;
+          chunk.add(overpass);
+
+          this.scene.add(chunk);
+          this.chunks.push({ group: chunk, overpass, z: 0 });
+        }
+      }
+
+      // Construye el paso elevado con túnel y el letrero verde "SUBWAY CITY"
+      buildSubwayCityOverpass() {
+        const group = new THREE.Group();
+
+        // Puente superior de concreto
+        const bridge = new THREE.Mesh(
+          new THREE.BoxGeometry(14.5, 4.2, 5.5),
+          this.mats.concreteOverpass
+        );
+        bridge.position.set(0, 8.8, 0);
+        group.add(bridge);
+
+        // Pilares laterales del túnel
+        for (const sx of [-6.1, 6.1]) {
+          const pillar = new THREE.Mesh(
+            new THREE.BoxGeometry(1.6, 7.0, 5.5),
+            this.mats.concreteOverpass
+          );
+          pillar.position.set(sx, 3.5, 0);
+          group.add(pillar);
+        }
+
+        // Cartel vial verde "SUBWAY CITY"
+        const signBoard = new THREE.Mesh(
+          new THREE.BoxGeometry(6.8, 2.1, 0.25),
+          this.mats.citySign
+        );
+        signBoard.position.set(-0.6, 9.6, 2.85);
+        group.add(signBoard);
+
+        // Señal cuadrada con flecha diagonal a la derecha del cartel principal
+        const arrowBoard = new THREE.Mesh(
+          new THREE.BoxGeometry(1.55, 1.55, 0.25),
+          this.mats.arrowSign
+        );
+        arrowBoard.position.set(3.85, 8.7, 2.85);
+        group.add(arrowBoard);
+
+        return group;
+      }
+
+      initPools() {
+        // Geometrías reutilizables para obstáculos
+        const trainBodyGeo = new THREE.BoxGeometry(2.32, PHYSICS.TRAIN_HEIGHT - 0.18, PHYSICS.TRAIN_LENGTH);
+        const trainRoofGeo = new THREE.BoxGeometry(2.36, 0.22, PHYSICS.TRAIN_LENGTH + 0.05);
+        const trainFrontGeo = new THREE.BoxGeometry(2.26, 3.8, 0.35);
+        const headlightGeo = new THREE.CircleGeometry(0.24, 12);
+
+        // Pool de 28 obstáculos
+        for (let i = 0; i < 28; i++) {
+          const container = new THREE.Group();
+          container.visible = false;
+
+          // Submodelo A: Tren Plateado (estático o móvil)
+          const silverGroup = new THREE.Group();
+          const sBody = new THREE.Mesh(trainBodyGeo, this.mats.silverSide);
+          sBody.position.y = (PHYSICS.TRAIN_HEIGHT - 0.18) / 2;
+          sBody.castShadow = true;
+          sBody.receiveShadow = true;
+          const sRoof = new THREE.Mesh(trainRoofGeo, this.mats.silverRoof);
+          sRoof.position.y = PHYSICS.TRAIN_HEIGHT - 0.08;
+          sRoof.receiveShadow = true;
+          const sFront = new THREE.Mesh(trainFrontGeo, this.mats.trainFront);
+          sFront.position.set(0, 2.1, PHYSICS.TRAIN_LENGTH / 2 + 0.05);
+          const hlLeft = new THREE.Mesh(headlightGeo, this.mats.headlight);
+          hlLeft.position.set(-0.68, 1.15, PHYSICS.TRAIN_LENGTH / 2 + 0.24);
+          const hlRight = hlLeft.clone();
+          hlRight.position.x = 0.68;
+          silverGroup.add(sBody, sRoof, sFront, hlLeft, hlRight);
+          container.add(silverGroup);
+
+          // Submodelo B: Vagón de Carga Rojo con Rampa Frontal Escalable
+          const redGroup = new THREE.Group();
+          const rBody = new THREE.Mesh(trainBodyGeo, this.mats.redCargo);
+          rBody.position.y = (PHYSICS.TRAIN_HEIGHT - 0.18) / 2;
+          rBody.castShadow = true;
+          rBody.receiveShadow = true;
+          const rRoof = new THREE.Mesh(trainRoofGeo, this.mats.silverRoof);
+          rRoof.position.y = PHYSICS.TRAIN_HEIGHT - 0.08;
+          // Rampa inclinada en el extremo frontal (+Z, hacia donde viene el jugador)
+          const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.35, 6.2), this.mats.ramp);
+          rampMesh.position.set(0, PHYSICS.TRAIN_HEIGHT / 2 - 0.1, PHYSICS.TRAIN_LENGTH / 2 + 2.3);
+          rampMesh.rotation.x = Math.atan2(PHYSICS.TRAIN_HEIGHT, 5.2);
+          redGroup.add(rBody, rRoof, rampMesh);
+          container.add(redGroup);
+
+          // Submodelo C: Barricada Baja Roja/Blanca con "X" y topes metálicos
+          const barGroup = new THREE.Group();
+          const bBoard = new THREE.Mesh(new THREE.BoxGeometry(2.15, 1.35, 0.35), this.mats.barricade);
+          bBoard.position.y = 0.72;
+          bBoard.castShadow = true;
+          barGroup.add(bBoard);
+          for (const cx of [-0.95, 0.95]) {
+            for (const cy of [0.22, 1.28]) {
+              const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.55, 12), this.mats.metalCap);
+              cap.rotation.x = Math.PI / 2;
+              cap.position.set(cx, cy, 0);
+              barGroup.add(cap);
+            }
+          }
+          container.add(barGroup);
+
+          // Submodelo D: Valla Alta (Hurdle) para rodar por debajo
+          const hurdleGroup = new THREE.Group();
+          const hBeam = new THREE.Mesh(new THREE.BoxGeometry(2.35, 1.35, 0.35), this.mats.hurdle);
+          hBeam.position.y = 2.25;
+          hBeam.castShadow = true;
+          const postL = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 2.9, 10), this.mats.metalCap);
+          postL.position.set(-1.12, 1.45, 0);
+          const postR = postL.clone();
+          postR.position.x = 1.12;
+          hurdleGroup.add(hBeam, postL, postR);
+          container.add(hurdleGroup);
+
+          this.scene.add(container);
+          this.obstacles.push({
+            container,
+            silverGroup,
+            redGroup,
+            barGroup,
+            hurdleGroup,
+            hlLeft,
+            hlRight,
+            active: false,
+            type: 'SILVER_TRAIN', // SILVER_TRAIN | MOVING_TRAIN | RED_RAMP_TRAIN | BARRICADE | HURDLE
+            lane: 0,
+            z: 0,
+            length: PHYSICS.TRAIN_LENGTH,
+            minY: 0,
+            maxY: PHYSICS.TRAIN_HEIGHT,
+            hasRamp: false,
+            movingActive: false,
+            hornPlayed: false
+          });
+        }
+
+        // Pool de 140 coleccionables (Monedas ★, Fichas Azules ⚡ y Power-Ups)
+        const coinGeo = new THREE.CylinderGeometry(0.46, 0.46, 0.14, 18);
+        coinGeo.rotateX(Math.PI / 2);
+        const coinMats = [this.mats.coinRim, this.mats.coinFace, this.mats.coinFace];
+        const energyMats = [this.mats.energyRim, this.mats.energyFace, this.mats.energyFace];
+        const puGeo = new THREE.OctahedronGeometry(0.58, 0);
+
+        for (let i = 0; i < 140; i++) {
+          const group = new THREE.Group();
+          group.visible = false;
+
+          const coinMesh = new THREE.Mesh(coinGeo, coinMats);
+          const energyMesh = new THREE.Mesh(coinGeo, energyMats);
+          energyMesh.scale.set(1.22, 1.22, 1.22);
+          const puMesh = new THREE.Mesh(puGeo, this.mats.puMagnet);
+
+          group.add(coinMesh, energyMesh, puMesh);
+          this.scene.add(group);
+
+          this.collectibles.push({
+            group,
+            coinMesh,
+            energyMesh,
+            puMesh,
+            active: false,
+            kind: 'COIN', // COIN | ENERGY | MAGNET | SNEAKERS | DOUBLE | JETPACK
+            x: 0,
+            y: 1.0,
+            z: 0
+          });
+        }
+
+        // Pool de 80 partículas (chispas metálicas, destellos dorados y energía cian)
+        const partGeo = new THREE.BoxGeometry(0.14, 0.14, 0.14);
+        for (let i = 0; i < 80; i++) {
+          const mesh = new THREE.Mesh(
+            partGeo,
+            new THREE.MeshBasicMaterial({ color: 0xffcc00 })
+          );
+          mesh.visible = false;
+          this.scene.add(mesh);
+          this.particles.push({
+            mesh,
+            active: false,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            life: 0,
+            maxLife: 0.4
+          });
+        }
+      }
+
+      // ==========================================================================
+      // 6. GENERACIÓN DE ESCENA INICIAL Y PISTA INFINITA ZERO-GAP
+      // ==========================================================================
+      resetWorldForTitle() {
+        // Limpiar pools
+        this.obstacles.forEach((o) => { o.active = false; o.container.visible = false; });
+        this.collectibles.forEach((c) => { c.active = false; c.group.visible = false; });
+        this.particles.forEach((p) => { p.active = false; p.mesh.visible = false; });
+
+        this.chunkCounter = 0;
+        // Colocar los 21 tramos contiguos desde z = +15 hacia -615
+        for (let i = 0; i < PHYSICS.ACTIVE_CHUNKS; i++) {
+          const z = 15 - i * PHYSICS.CHUNK_LENGTH;
+          const chunk = this.chunks[i];
+          chunk.z = z;
+          chunk.group.position.z = z;
+          // Mostrar cartel "SUBWAY CITY" y túnel a 45m frente al corredor (igual que en la imagen)
+          chunk.overpass.visible = (i === 2);
+          this.chunkCounter++;
+        }
+
+        // Recrear composición exacta de la imagen de referencia para vista previa y arranque:
+        // - Vagón rojo a la izquierda (-1)
+        // - Tren plateado en el centro (0) sobre el cual corre el personaje
+        // - Tren plateado a la derecha (+1) + Barricada con "X" con chispas
+        this.spawnObstacle('RED_RAMP_TRAIN', -1, -18);
+        this.spawnObstacle('SILVER_TRAIN', 0, -14);
+        this.spawnObstacle('SILVER_TRAIN', 1, -24);
+        this.spawnObstacle('BARRICADE', 1, -10);
+
+        // Hileras de monedas ★ y ficha azul ⚡ como en la referencia
+        this.spawnCoinLine(-1, 5.1, -10, 5, 2.6, true);
+        this.spawnCollectible('ENERGY', 1, 5.3, -16);
+
+        // Posicionar corredor sobre el tren plateado central
+        this.player.lane = 0;
+        this.player.prevLane = 0;
+        this.player.x = 0;
+        this.player.laneStartX = 0;
+        this.player.laneTargetX = 0;
+        this.player.laneTimer = 1;
+        this.player.y = PHYSICS.TRAIN_HEIGHT;
+        this.player.groundY = PHYSICS.TRAIN_HEIGHT;
+        this.player.vy = 0;
+        this.player.isGrounded = true;
+        this.player.isRolling = false;
+        this.player.isFastFalling = false;
+
+        this.runner.root.position.set(0, PHYSICS.TRAIN_HEIGHT, 0);
+        this.runner.hoverboard.visible = false;
+        this.runner.jetpack.visible = false;
+        this.chaser.visible = false;
+
+        // Generar patrones procedimentales dejando margen amplio de arranque
+        for (let z = -72; z >= -580; z -= 40) {
+          this.generateWaveAt(z);
+        }
+      }
+
+      startNewGame() {
+        this.audio.unlock();
+        this.state = 'PLAYING';
+        this.speed = PHYSICS.BASE_SPEED;
+        this.distance = 0;
+        this.score = 0;
+        this.coins = 0;
+        this.baseMultiplier = 1;
+        this.stumbleCount = 0;
+        this.stumbleWindowTimer = 0;
+        this.chaserVisibleTimer = 0;
+        this.energySurgeTimer = 0;
+        this.hoverboardCooldown = 0;
+
+        this.powerups.magnet = 0;
+        this.powerups.sneakers = 0;
+        this.powerups.doubleScore = 0;
+        this.powerups.hoverboard = 0;
+        this.powerups.jetpack = 0;
+
+        this.resetWorldForTitle();
+        // Otorgar 2.2 segundos de gracia al arrancar para evitar choques sorpresa
+        this.invulnerableTimer = 2.2;
+        this.hideAllOverlays();
+        this.updateUI();
+        this.showToast('¡A CORRER POR SUBWAY CITY!');
+      }
+
+      spawnObstacle(type, lane, z) {
+        const obs = this.obstacles.find((o) => !o.active);
+        if (!obs) return null;
+
+        obs.active = true;
+        obs.type = type;
+        obs.lane = lane;
+        obs.z = z;
+        obs.movingActive = false;
+        obs.hornPlayed = false;
+
+        obs.silverGroup.visible = false;
+        obs.redGroup.visible = false;
+        obs.barGroup.visible = false;
+        obs.hurdleGroup.visible = false;
+
+        if (type === 'SILVER_TRAIN' || type === 'MOVING_TRAIN') {
+          obs.silverGroup.visible = true;
+          obs.length = PHYSICS.TRAIN_LENGTH;
+          obs.minY = 0;
+          obs.maxY = PHYSICS.TRAIN_HEIGHT;
+          obs.hasRamp = false;
+        } else if (type === 'RED_RAMP_TRAIN') {
+          obs.redGroup.visible = true;
+          obs.length = PHYSICS.TRAIN_LENGTH;
+          obs.minY = 0;
+          obs.maxY = PHYSICS.TRAIN_HEIGHT;
+          obs.hasRamp = true;
+        } else if (type === 'BARRICADE') {
+          obs.barGroup.visible = true;
+          obs.length = 1.2;
+          obs.minY = 0;
+          obs.maxY = 1.38;
+          obs.hasRamp = false;
+        } else if (type === 'HURDLE') {
+          obs.hurdleGroup.visible = true;
+          obs.length = 1.2;
+          obs.minY = 1.55; // Espacio libre inferior para deslizarse/rodar
+          obs.maxY = 2.95;
+          obs.hasRamp = false;
+        }
+
+        obs.container.position.set(lane * PHYSICS.LANE_WIDTH, 0, z);
+        obs.container.visible = true;
+        return obs;
+      }
+
+      spawnCollectible(kind, lane, y, z) {
+        const item = this.collectibles.find((c) => !c.active);
+        if (!item) return;
+
+        item.active = true;
+        item.kind = kind;
+        item.x = lane * PHYSICS.LANE_WIDTH;
+        item.y = y;
+        item.z = z;
+
+        item.coinMesh.visible = (kind === 'COIN');
+        item.energyMesh.visible = (kind === 'ENERGY');
+        item.puMesh.visible = (kind !== 'COIN' && kind !== 'ENERGY');
+
+        if (kind === 'MAGNET') item.puMesh.material = this.mats.puMagnet;
+        else if (kind === 'SNEAKERS') item.puMesh.material = this.mats.puSneakers;
+        else if (kind === 'DOUBLE') item.puMesh.material = this.mats.puDouble;
+        else if (kind === 'JETPACK') item.puMesh.material = this.mats.puJetpack;
+
+        item.group.position.set(item.x, item.y, item.z);
+        item.group.visible = true;
+      }
+
+      spawnCoinLine(lane, y, startZ, count, spacing = 2.6, includeEnergyAtStart = false) {
+        for (let i = 0; i < count; i++) {
+          const z = startZ - i * spacing;
+          if (i === 0 && includeEnergyAtStart) {
+            this.spawnCollectible('ENERGY', lane, y, z);
+          } else {
+            this.spawnCollectible('COIN', lane, y, z);
+          }
+        }
+      }
+
+      spawnCoinArc(lane, baseY, peakY, centerZ, count = 5) {
+        for (let i = 0; i < count; i++) {
+          const t = count > 1 ? i / (count - 1) : 0.5;
+          const parabola = 4 * t * (1 - t);
+          const y = baseY + (peakY - baseY) * parabola;
+          const z = centerZ + (0.5 - t) * 8.5;
+          this.spawnCollectible('COIN', lane, y, z);
+        }
+      }
+
+      // Generador procedimental con ruta navegable garantizada
+      generateWaveAt(zCenter) {
+        const lanes = [-1, 0, 1];
+        // Elegir un carril garantizado libre o navegable
+        const safeLane = lanes[Math.floor(Math.random() * 3)];
+        const difficulty = Math.min(1, this.distance / 1800);
+
+        for (const lane of lanes) {
+          if (lane === safeLane) {
+            // En el carril navegable colocamos o vía libre con monedas, o una barricada saltable, o una rampa
+            const r = Math.random();
+            if (r < 0.35) {
+              this.spawnObstacle('RED_RAMP_TRAIN', lane, zCenter);
+              this.spawnCoinLine(lane, PHYSICS.TRAIN_HEIGHT + 0.9, zCenter + 4, 5, 2.7, Math.random() < 0.3);
+            } else if (r < 0.65) {
+              this.spawnObstacle('BARRICADE', lane, zCenter);
+              this.spawnCoinArc(lane, 1.1, 3.1, zCenter, 5);
+            } else if (r < 0.82) {
+              this.spawnObstacle('HURDLE', lane, zCenter);
+              this.spawnCoinLine(lane, 0.9, zCenter + 4, 4, 2.5);
+            } else {
+              this.spawnCoinLine(lane, 1.0, zCenter + 5, 5, 2.6, Math.random() < 0.25);
+            }
+          } else {
+            // En los otros carriles generamos trenes estáticos, trenes móviles o vallas
+            const roll = Math.random();
+            if (roll < 0.38) {
+              const trainType = (difficulty > 0.15 && Math.random() < 0.45) ? 'MOVING_TRAIN' : 'SILVER_TRAIN';
+              this.spawnObstacle(trainType, lane, zCenter);
+              if (Math.random() < 0.45) {
+                this.spawnCoinLine(lane, PHYSICS.TRAIN_HEIGHT + 0.9, zCenter + 4, 4, 2.8, Math.random() < 0.35);
+              }
+            } else if (roll < 0.62) {
+              this.spawnObstacle('RED_RAMP_TRAIN', lane, zCenter);
+            } else if (roll < 0.80) {
+              this.spawnObstacle('BARRICADE', lane, zCenter);
+            } else if (roll < 0.92) {
+              this.spawnObstacle('HURDLE', lane, zCenter);
+            }
+          }
+        }
+
+        // Aparición periódica de Power-Ups especiales (Imán, Super Sneakers, 2x, Jetpack)
+        if (Math.random() < 0.22) {
+          const puTypes = ['MAGNET', 'SNEAKERS', 'DOUBLE', 'JETPACK'];
+          const chosen = puTypes[Math.floor(Math.random() * puTypes.length)];
+          this.spawnCollectible(chosen, safeLane, 1.35, zCenter - 11);
+        }
+      }
+
+      spawnParticles(x, y, z, colorHex, count = 12, spread = 5) {
+        let spawned = 0;
+        for (const p of this.particles) {
+          if (!p.active) {
+            p.active = true;
+            p.mesh.material.color.setHex(colorHex);
+            p.mesh.position.set(x, y, z);
+            p.vx = (Math.random() - 0.5) * spread * 2;
+            p.vy = Math.random() * spread + 1.5;
+            p.vz = (Math.random() - 0.5) * spread * 2;
+            p.life = 0;
+            p.maxLife = 0.28 + Math.random() * 0.22;
+            p.mesh.scale.setScalar(1);
+            p.mesh.visible = true;
+            spawned++;
+            if (spawned >= count) break;
+          }
+        }
+      }
+
+      // ==========================================================================
+      // 7. CONTROLES DE ENTRADA (TECLADO, SWIPE TÁCTIL Y DOBLE TAP)
+      // ==========================================================================
+      bindEvents() {
+        window.addEventListener('resize', () => {
+          this.camera.aspect = window.innerWidth / window.innerHeight;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          this.renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Teclado
+        window.addEventListener('keydown', (e) => {
+          if (e.repeat) return;
+          const code = e.code;
+
+          if (code === 'KeyP' || code === 'Escape') {
+            if (this.state === 'PLAYING') this.pauseGame();
+            else if (this.state === 'PAUSED') this.resumeGame();
+            return;
+          }
+
+          if (code === 'KeyM') {
+            this.handleToggleAudio();
+            return;
+          }
+
+          if (this.state !== 'PLAYING') return;
+
+          if (code === 'ArrowLeft' || code === 'KeyA') {
+            this.moveLane(-1);
+          } else if (code === 'ArrowRight' || code === 'KeyD') {
+            this.moveLane(1);
+          } else if (code === 'ArrowUp' || code === 'KeyW' || code === 'Space') {
+            e.preventDefault();
+            this.triggerJump();
+          } else if (code === 'ArrowDown' || code === 'KeyS') {
+            this.triggerRoll();
+          } else if (code === 'KeyH') {
+            this.activateHoverboard();
+          }
+        });
+
+        // Gestos táctiles (Swipe de baja latencia + Doble Tap para Hoverboard)
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let swipeConsumed = false;
+        let lastTapTime = 0;
+
+        this.canvas.addEventListener('touchstart', (e) => {
+          this.audio.unlock();
+          if (e.touches.length > 0) {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            swipeConsumed = false;
+          }
+        }, { passive: true });
+
+        this.canvas.addEventListener('touchmove', (e) => {
+          if (this.state !== 'PLAYING' || swipeConsumed || e.touches.length === 0) return;
+          const dx = e.touches[0].clientX - touchStartX;
+          const dy = e.touches[0].clientY - touchStartY;
+          const threshold = 26;
+
+          if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
+            swipeConsumed = true;
+            if (Math.abs(dx) > Math.abs(dy)) {
+              this.moveLane(dx > 0 ? 1 : -1);
+            } else {
+              if (dy < 0) this.triggerJump();
+              else this.triggerRoll();
+            }
+          }
+        }, { passive: true });
+
+        this.canvas.addEventListener('touchend', () => {
+          if (this.state !== 'PLAYING') return;
+          if (!swipeConsumed) {
+            const now = performance.now();
+            if (now - lastTapTime < 280) {
+              this.activateHoverboard();
+              lastTapTime = 0;
+            } else {
+              lastTapTime = now;
+            }
+          }
+        });
+
+        // Doble clic con ratón en escritorio para Hoverboard
+        this.canvas.addEventListener('dblclick', () => {
+          if (this.state === 'PLAYING') {
+            this.activateHoverboard();
+          }
+        });
+
+        // Botones de Interfaz
+        document.getElementById('btn-start').addEventListener('click', () => this.startNewGame());
+        document.getElementById('btn-retry').addEventListener('click', () => this.startNewGame());
+        document.getElementById('btn-pause').addEventListener('click', () => {
+          if (this.state === 'PLAYING') this.pauseGame();
+        });
+        document.getElementById('btn-resume').addEventListener('click', () => this.resumeGame());
+        document.getElementById('btn-restart-pause').addEventListener('click', () => this.startNewGame());
+        document.getElementById('btn-hoverboard').addEventListener('click', () => {
+          if (this.state === 'PLAYING') this.activateHoverboard();
+        });
+
+        document.getElementById('btn-toggle-audio-title').addEventListener('click', () => this.handleToggleAudio());
+        document.getElementById('btn-toggle-audio-pause').addEventListener('click', () => this.handleToggleAudio());
+      }
+
+      handleToggleAudio() {
+        this.audio.unlock();
+        const muted = this.audio.toggleMute();
+        const label = muted ? '🔇 Sonido: SILENCIADO' : '🔊 Sonido: ACTIVADO';
+        document.getElementById('btn-toggle-audio-title').textContent = label;
+        document.getElementById('btn-toggle-audio-pause').textContent = label;
+      }
+
+      moveLane(dir) {
+        const target = this.player.lane + dir;
+        if (target < -1 || target > 1) return;
+        this.player.prevLane = this.player.lane;
+        this.player.lane = target;
+        this.player.laneStartX = this.player.x;
+        this.player.laneTargetX = target * PHYSICS.LANE_WIDTH;
+        this.player.laneTimer = 0;
+        this.audio.playDodge();
+      }
+
+      triggerJump() {
+        if (this.powerups.jetpack > 0) return;
+        this.player.jumpBufferTimer = PHYSICS.JUMP_BUFFER_TIME;
+      }
+
+      executeJump() {
+        const hasSneakers = this.powerups.sneakers > 0;
+        this.player.vy = hasSneakers ? PHYSICS.SUPER_JUMP_VELOCITY : PHYSICS.JUMP_VELOCITY;
+        this.player.isGrounded = false;
+        this.player.coyoteTimer = 0;
+        this.player.jumpBufferTimer = 0;
+        this.player.isRolling = false;
+        this.player.isFastFalling = false;
+        this.audio.playJump(hasSneakers);
+      }
+
+      triggerRoll() {
+        if (this.powerups.jetpack > 0) return;
+        if (!this.player.isGrounded) {
+          // Caída rápida en el aire (fast-fall) que encadena con rodadura al tocar el suelo
+          this.player.isFastFalling = true;
+          this.player.vy = Math.min(this.player.vy, -24);
+        }
+        this.player.isRolling = true;
+        this.player.rollTimer = PHYSICS.ROLL_DURATION;
+        this.audio.playRoll();
+      }
+
+      activateHoverboard() {
+        if (this.powerups.hoverboard > 0 || this.hoverboardCooldown > 0 || this.powerups.jetpack > 0) return;
+        this.powerups.hoverboard = 12.0;
+        this.runner.hoverboard.visible = true;
+        this.spawnParticles(this.player.x, this.player.y + 0.3, 0, 0x38f2ff, 18, 6);
+        this.audio.playHoverboard();
+        this.showToast('🛹 ESCUDO HOVERBOARD ACTIVO');
+      }
+
+      // ==========================================================================
+      // 8. ACTUALIZACIÓN DE FÍSICA, COLISIONES Y BUCLE PRINCIPAL
+      // ==========================================================================
+      update(dt) {
+        if (this.state === 'TITLE') {
+          // Animación en vivo de presentación en pantalla de título
+          this.player.runCycle += dt * 11;
+          this.animateRunner(dt, 24);
+          this.rotateCollectibles(dt);
+          return;
+        }
+
+        if (this.state !== 'PLAYING') return;
+
+        // 1. Aceleración progresiva de velocidad longitudinal (22 -> 54 m/s)
+        this.speed = Math.min(PHYSICS.MAX_SPEED, this.speed + PHYSICS.ACCELERATION * dt);
+        const effectiveSpeed = this.speed + (this.energySurgeTimer > 0 ? 7.5 : 0);
+
+        // 2. Avance de distancia y puntaje con multiplicador dinámico
+        const stepDist = effectiveSpeed * dt;
+        this.distance += stepDist;
+        this.baseMultiplier = Math.min(30, 1 + Math.floor(this.distance / 600));
+        const activeMult = this.baseMultiplier * (this.powerups.doubleScore > 0 ? 2 : 1);
+        this.score += stepDist * activeMult * 1.45;
+
+        // 3. Temporizadores de estados y power-ups
+        if (this.stumbleWindowTimer > 0) {
+          this.stumbleWindowTimer -= dt;
+          if (this.stumbleWindowTimer <= 0) this.stumbleCount = 0;
+        }
+        if (this.chaserVisibleTimer > 0) this.chaserVisibleTimer -= dt;
+        if (this.invulnerableTimer > 0) this.invulnerableTimer -= dt;
+        if (this.energySurgeTimer > 0) this.energySurgeTimer -= dt;
+        if (this.hoverboardCooldown > 0) this.hoverboardCooldown -= dt;
+
+        for (const key of Object.keys(this.powerups)) {
+          if (this.powerups[key] > 0) {
+            this.powerups[key] = Math.max(0, this.powerups[key] - dt);
+            if (this.powerups[key] === 0 && key === 'hoverboard') {
+              this.runner.hoverboard.visible = false;
+              this.hoverboardCooldown = 3.0;
+            }
+            if (this.powerups[key] === 0 && key === 'jetpack') {
+              this.runner.jetpack.visible = false;
+              this.invulnerableTimer = 1.5;
+            }
+          }
+        }
+
+        // 4. Interpolación lateral suavizada (0.15 s)
+        if (this.player.laneTimer < 1) {
+          this.player.laneTimer = Math.min(1, this.player.laneTimer + dt / PHYSICS.LANE_SWITCH_DURATION);
+          const ease = 1 - Math.pow(1 - this.player.laneTimer, 3);
+          this.player.x = this.player.laneStartX + (this.player.laneTargetX - this.player.laneStartX) * ease;
+        } else {
+          this.player.x = this.player.laneTargetX;
+        }
+
+        // 5. Cálculo de superficie bajo el jugador (suelo 0m, rampa o techo de tren 4.5m)
+        const supportY = this.computeSupportHeight(this.player.x, this.player.y);
+        this.player.groundY = supportY;
+
+        // 6. Física vertical (Jetpack vs Salto/Gravedad)
+        if (this.powerups.jetpack > 0) {
+          this.runner.jetpack.visible = true;
+          this.player.y += (8.8 - this.player.y) * Math.min(1, dt * 6);
+          this.player.vy = 0;
+          this.player.isGrounded = false;
+          this.player.isRolling = false;
+          // Generar hileras aéreas de monedas mientras vuela con Jetpack
+          if (Math.random() < dt * 7) {
+            this.spawnCollectible('COIN', this.player.lane, 8.8, -55);
+          }
+        } else {
+          if (this.player.isGrounded) {
+            this.player.coyoteTimer = PHYSICS.COYOTE_TIME;
+          } else {
+            this.player.coyoteTimer = Math.max(0, this.player.coyoteTimer - dt);
+          }
+
+          if (this.player.jumpBufferTimer > 0) {
+            this.player.jumpBufferTimer = Math.max(0, this.player.jumpBufferTimer - dt);
+            if (this.player.isGrounded || this.player.coyoteTimer > 0) {
+              this.executeJump();
+            }
+          }
+
+          if (!this.player.isGrounded) {
+            const g = this.player.isFastFalling ? PHYSICS.FAST_FALL_GRAVITY : PHYSICS.GRAVITY;
+            this.player.vy -= g * dt;
+            this.player.y += this.player.vy * dt;
+
+            if (this.player.y <= this.player.groundY && this.player.vy <= 0) {
+              this.player.y = this.player.groundY;
+              this.player.vy = 0;
+              this.player.isGrounded = true;
+              this.player.isFastFalling = false;
+            }
+          } else {
+            // Si corre sobre un tren y este termina, empieza a caer con coyote time
+            if (this.player.y > this.player.groundY + 0.15) {
+              this.player.isGrounded = false;
+            } else {
+              this.player.y = this.player.groundY;
+            }
+          }
+        }
+
+        // Rodadura temporizada
+        if (this.player.isRolling) {
+          this.player.rollTimer -= dt;
+          if (this.player.rollTimer <= 0) {
+            this.player.isRolling = false;
+          }
+        }
+
+        // 7. Reciclaje infinito de tramos sin brechas (Zero-Gap Tail-Stitching)
+        let minChunkZ = Infinity;
+        for (const c of this.chunks) {
+          c.z += stepDist;
+          if (c.z < minChunkZ) minChunkZ = c.z;
+        }
+        for (const c of this.chunks) {
+          if (c.z > 30) {
+            c.z = minChunkZ - PHYSICS.CHUNK_LENGTH;
+            minChunkZ = c.z;
+            this.chunkCounter++;
+            // Mostrar arco vial "SUBWAY CITY" periódicamente
+            c.overpass.visible = (this.chunkCounter % 15 === 0);
+            this.generateWaveAt(c.z);
+          }
+          c.group.position.z = c.z;
+        }
+
+        // 8. Movimiento de trenes, obstáculos y detección de colisiones
+        this.updateObstaclesAndCollisions(dt, stepDist, effectiveSpeed);
+
+        // 9. Coleccionables e Imán de Monedas
+        this.updateCollectibles(dt, stepDist);
+
+        // 10. Partículas, animaciones, cámara y audio
+        this.updateParticles(dt);
+        this.animateRunner(dt, effectiveSpeed);
+        this.updateCameraAndEffects(dt, effectiveSpeed);
+        this.audio.updateMusic(dt, effectiveSpeed, true);
+        this.updateHUDRealtime(activeMult);
+      }
+
+      computeSupportHeight(px, py) {
+        let highest = 0;
+        for (const obs of this.obstacles) {
+          if (!obs.active) continue;
+          const obsX = obs.lane * PHYSICS.LANE_WIDTH;
+          if (Math.abs(px - obsX) > 1.05) continue;
+
+          const halfLen = obs.length * 0.5;
+          // Soporte sobre rampa frontal de vagones rojos
+          if (obs.hasRamp) {
+            const rampFront = obs.z + halfLen + 4.8;
+            const rampBack = obs.z + halfLen - 0.4;
+            if (0 <= rampFront && 0 >= rampBack) {
+              const t = THREE.MathUtils.clamp((rampFront - 0) / (rampFront - rampBack), 0, 1);
+              const rampY = t * PHYSICS.TRAIN_HEIGHT;
+              if (py >= rampY - 0.7) {
+                highest = Math.max(highest, rampY);
+              }
+            }
+          }
+
+          // Soporte sobre el techo de trenes o bordes de barricadas
+          if (0 <= obs.z + halfLen + 0.4 && 0 >= obs.z - halfLen - 0.4) {
+            if (py >= obs.maxY - 0.55) {
+              highest = Math.max(highest, obs.maxY);
+            }
+          }
+        }
+        return highest;
+      }
+
+      updateObstaclesAndCollisions(dt, stepDist, effectiveSpeed) {
+        const playerMinY = this.player.y + 0.1;
+        const playerMaxY = this.player.y + (this.player.isRolling ? 0.82 : 1.85);
+
+        for (const obs of this.obstacles) {
+          if (!obs.active) continue;
+
+          // Trenes expresos en movimiento se activan a <= 70 m
+          let obsAdvance = stepDist;
+          if (obs.type === 'MOVING_TRAIN') {
+            if (!obs.movingActive && obs.z >= -PHYSICS.MOVING_TRAIN_TRIGGER_DIST) {
+              obs.movingActive = true;
+              if (!obs.hornPlayed) {
+                obs.hornPlayed = true;
+                this.audio.playTrainHorn();
+              }
+            }
+            if (obs.movingActive) {
+              obsAdvance += effectiveSpeed * PHYSICS.MOVING_TRAIN_SPEED_MULT * dt;
+              // Parpadeo de faros frontales
+              const blink = Math.sin(performance.now() * 0.025) > 0;
+              obs.hlLeft.visible = blink;
+              obs.hlRight.visible = !blink;
+            }
+          }
+
+          obs.z += obsAdvance;
+          obs.container.position.z = obs.z;
+
+          // Emitir chispas ocasionales en barricadas cercanas (detalle visual de la referencia)
+          if (obs.type === 'BARRICADE' && obs.z > -16 && obs.z < 2 && Math.random() < dt * 10) {
+            this.spawnParticles(obs.container.position.x - 0.7, 0.35, obs.z + 0.25, 0xffaa22, 1, 2.5);
+          }
+
+          // Reciclar obstáculo cuando queda atrás de la cámara
+          if (obs.z - obs.length * 0.5 > 24) {
+            obs.active = false;
+            obs.container.visible = false;
+            continue;
+          }
+
+          // Comprobación AABB en el carril actual con bordes indulgentes
+          const obsX = obs.lane * PHYSICS.LANE_WIDTH;
+          const dx = Math.abs(this.player.x - obsX);
+          if (dx > 0.78) continue;
+
+          const halfLen = obs.length * 0.5;
+          // Si tiene rampa frontal, permite subir sin chocar de frente
+          const zFront = obs.hasRamp ? obs.z + halfLen - 0.5 : obs.z + halfLen;
+          const zBack = obs.z - halfLen;
+
+          if (0.34 >= zBack && -0.34 <= zFront) {
+            // Superposición vertical con margen superior indulgente
+            const overlapsY = (playerMaxY > obs.minY + 0.18) && (playerMinY < obs.maxY - 0.30);
+            if (overlapsY) {
+              if (this.invulnerableTimer > 0) {
+                continue;
+              }
+
+              if (this.powerups.hoverboard > 0) {
+                this.consumeHoverboardShield();
+                return;
+              }
+
+              // Ningún primer impacto mata al instante: el primer golpe provoca tropiezo,
+              // despeja el obstáculo inmediato y activa la persecución del Inspector.
+              if (this.stumbleCount === 0) {
+                this.handleSurvivableImpact(obs);
+                return;
+              } else {
+                this.triggerGameOver();
+                return;
+              }
+            }
+          }
+        }
+      }
+
+      handleSurvivableImpact(hitObs) {
+        // Si estaba cambiando de carril, devolverlo a su carril anterior; si chocó de frente,
+        // romper el obstáculo con chispas o moverlo a un carril libre para que siga corriendo.
+        const isSideClip = this.player.laneTimer < 0.78 && this.player.prevLane !== this.player.lane;
+
+        if (isSideClip) {
+          const backLane = this.player.prevLane;
+          this.player.lane = backLane;
+          this.player.laneStartX = this.player.x;
+          this.player.laneTargetX = backLane * PHYSICS.LANE_WIDTH;
+          this.player.laneTimer = 0;
+        } else if (hitObs) {
+          // Destruir el obstáculo impactado para permitir continuar la carrera
+          this.spawnParticles(hitObs.container.position.x, 1.4, hitObs.z, 0xffaa22, 18, 7);
+          hitObs.active = false;
+          hitObs.container.visible = false;
+        }
+
+        this.stumbleCount = 1;
+        this.stumbleWindowTimer = PHYSICS.STUMBLE_WINDOW;
+        this.chaserVisibleTimer = PHYSICS.STUMBLE_WINDOW;
+        this.invulnerableTimer = 1.5;
+        this.cameraShake = 0.45;
+
+        this.spawnParticles(this.player.x, this.player.y + 0.8, 0, 0xffaa00, 16, 6);
+        this.audio.playStumble();
+        this.flashScreen('rgba(255, 160, 0, 0.25)');
+        this.showToast('⚠️ ¡TROPIEZO! EL INSPECTOR TE SIGUE');
+      }
+
+      consumeHoverboardShield() {
+        this.powerups.hoverboard = 0;
+        this.runner.hoverboard.visible = false;
+        this.hoverboardCooldown = 4.0;
+        this.invulnerableTimer = 1.4;
+        this.cameraShake = 0.55;
+
+        // Destruir obstáculos cercanos en un radio de 22m
+        for (const obs of this.obstacles) {
+          if (obs.active && Math.abs(obs.z) < 22) {
+            this.spawnParticles(obs.container.position.x, 1.5, obs.z, 0x38f2ff, 14, 8);
+            obs.active = false;
+            obs.container.visible = false;
+          }
+        }
+
+        this.flashScreen('rgba(56, 242, 255, 0.35)');
+        this.audio.playShieldBreak();
+        this.showToast('💥 ¡ESCUDO HOVERBOARD SALVÓ TU CARRERA!');
+      }
+
+      updateCollectibles(dt, stepDist) {
+        const magnetActive = this.powerups.magnet > 0;
+        const playerCenterY = this.player.y + 1.0;
+
+        for (const item of this.collectibles) {
+          if (!item.active) continue;
+
+          item.z += stepDist;
+
+          // Atracción vectorial del Imán de Monedas
+          if (magnetActive && (item.kind === 'COIN' || item.kind === 'ENERGY')) {
+            const dz = 0 - item.z;
+            if (dz > -4 && dz < 24) {
+              item.x += (this.player.x - item.x) * Math.min(1, dt * 11);
+              item.y += (playerCenterY - item.y) * Math.min(1, dt * 11);
+              item.z += (0 - item.z) * Math.min(1, dt * 9);
+            }
+          }
+
+          item.group.position.set(item.x, item.y, item.z);
+          item.group.rotation.y += dt * 3.4;
+
+          if (item.z > 16) {
+            item.active = false;
+            item.group.visible = false;
+            continue;
+          }
+
+          // Recolección por proximidad
+          const distSq =
+            Math.pow(item.x - this.player.x, 2) +
+            Math.pow(item.y - playerCenterY, 2) +
+            Math.pow(item.z, 2);
+
+          if (distSq < 1.85) {
+            this.collectItem(item);
+          }
+        }
+      }
+
+      collectItem(item) {
+        item.active = false;
+        item.group.visible = false;
+
+        if (item.kind === 'COIN') {
+          this.coins++;
+          this.score += 25 * this.baseMultiplier * (this.powerups.doubleScore > 0 ? 2 : 1);
+          this.spawnParticles(item.x, item.y, item.z, 0xffd700, 6, 3.5);
+          this.audio.playCoin();
+        } else if (item.kind === 'ENERGY') {
+          this.coins += 3;
+          this.score += 150 * this.baseMultiplier;
+          this.energySurgeTimer = 1.6;
+          this.spawnParticles(item.x, item.y, item.z, 0x00e5ff, 14, 5.5);
+          this.flashScreen('rgba(0, 210, 255, 0.22)');
+          this.audio.playEnergyToken();
+          this.showToast('⚡ ¡ENERGÍA EXTRA +150 PTS!');
+        } else if (item.kind === 'MAGNET') {
+          this.powerups.magnet = 11.0;
+          this.spawnParticles(item.x, item.y, item.z, 0xff2a55, 14, 5);
+          this.audio.playPowerup();
+          this.showToast('🧲 IMÁN DE MONEDAS');
+        } else if (item.kind === 'SNEAKERS') {
+          this.powerups.sneakers = 11.0;
+          this.spawnParticles(item.x, item.y, item.z, 0x39ff14, 14, 5);
+          this.audio.playPowerup();
+          this.showToast('👟 SUPER SNEAKERS (SALTO ALTO)');
+        } else if (item.kind === 'DOUBLE') {
+          this.powerups.doubleScore = 11.0;
+          this.spawnParticles(item.x, item.y, item.z, 0xffaa00, 14, 5);
+          this.audio.playPowerup();
+          this.showToast('✨ MULTIPLICADOR 2X');
+        } else if (item.kind === 'JETPACK') {
+          this.powerups.jetpack = 7.5;
+          this.powerups.hoverboard = 0;
+          this.runner.hoverboard.visible = false;
+          this.spawnParticles(item.x, item.y, item.z, 0x00e5ff, 18, 6);
+          this.audio.playPowerup();
+          this.showToast('🚀 MOCHILA PROPULSORA (JETPACK)');
+        }
+      }
+
+      rotateCollectibles(dt) {
+        for (const item of this.collectibles) {
+          if (item.active) item.group.rotation.y += dt * 3.0;
+        }
+      }
+
+      updateParticles(dt) {
+        for (const p of this.particles) {
+          if (!p.active) continue;
+          p.life += dt;
+          if (p.life >= p.maxLife) {
+            p.active = false;
+            p.mesh.visible = false;
+            continue;
+          }
+          p.vy -= 14 * dt;
+          p.mesh.position.x += p.vx * dt;
+          p.mesh.position.y += p.vy * dt;
+          p.mesh.position.z += p.vz * dt;
+          const scale = 1 - p.life / p.maxLife;
+          p.mesh.scale.setScalar(Math.max(0.05, scale));
+        }
+      }
+
+      animateRunner(dt, effectiveSpeed) {
+        this.player.runCycle += dt * (effectiveSpeed * 0.62);
+        const r = this.runner;
+
+        r.root.position.set(this.player.x, this.player.y, 0);
+
+        // Color de zapatillas si tiene Super Sneakers
+        r.shoeMat.color.setHex(this.powerups.sneakers > 0 ? 0x39ff14 : 0xc96b96);
+
+        // Parpadeo breve si es invulnerable
+        r.root.visible = this.invulnerableTimer > 0
+          ? Math.floor(this.invulnerableTimer * 20) % 2 === 0
+          : true;
+
+        // Inclinación lateral al cambiar de carril
+        const laneDiff = this.player.laneTargetX - this.player.x;
+        r.root.rotation.z = THREE.MathUtils.clamp(-laneDiff * 0.16, -0.35, 0.35);
+
+        if (this.powerups.jetpack > 0) {
+          r.bodyPivot.rotation.x = -1.15;
+          r.bodyPivot.scale.set(1, 1, 1);
+          r.leftArm.rotation.x = -2.6;
+          r.rightArm.rotation.x = -2.6;
+          r.leftLeg.rotation.x = 0.2;
+          r.rightLeg.rotation.x = 0.2;
+        } else if (this.powerups.hoverboard > 0) {
+          r.bodyPivot.rotation.x = -0.15;
+          r.bodyPivot.rotation.y = 0.55;
+          r.bodyPivot.scale.set(1, 1, 1);
+          r.leftArm.rotation.x = 0.3;
+          r.rightArm.rotation.x = -0.3;
+          r.leftLeg.rotation.x = -0.15;
+          r.rightLeg.rotation.x = 0.15;
+        } else if (this.player.isRolling) {
+          r.bodyPivot.rotation.y = 0;
+          r.bodyPivot.scale.set(1.05, 0.48, 1.05);
+          r.bodyPivot.position.y = 0.52;
+          r.bodyPivot.rotation.x -= dt * 16;
+        } else {
+          r.bodyPivot.rotation.y = 0;
+          r.bodyPivot.scale.set(1, 1, 1);
+          r.bodyPivot.position.y = 1.05 + Math.abs(Math.sin(this.player.runCycle)) * 0.11;
+          r.bodyPivot.rotation.x = -0.18;
+
+          if (!this.player.isGrounded) {
+            r.leftLeg.rotation.x = 0.75;
+            r.rightLeg.rotation.x = -0.55;
+            r.leftArm.rotation.x = -1.2;
+            r.rightArm.rotation.x = 0.6;
+          } else {
+            const swing = Math.sin(this.player.runCycle) * 0.95;
+            r.leftLeg.rotation.x = swing;
+            r.rightLeg.rotation.x = -swing;
+            r.leftArm.rotation.x = -swing * 0.85;
+            r.rightArm.rotation.x = swing * 0.85;
+          }
+        }
+
+        // Aura cian pulsante detrás del jugador
+        r.auraMesh.scale.setScalar(0.95 + Math.sin(performance.now() * 0.012) * 0.12);
+
+        // Inspector y perro perseguidor tras tropiezo
+        if (this.chaserVisibleTimer > 0) {
+          this.chaser.visible = true;
+          const distBehind = 2.4 + (3.8 - this.chaserVisibleTimer) * 0.9;
+          this.chaser.position.set(this.player.x * 0.85, 0, distBehind);
+        } else {
+          this.chaser.visible = false;
+        }
+      }
+
+      updateCameraAndEffects(dt, effectiveSpeed) {
+        const targetCamX = this.player.x * 0.58;
+        const targetCamY = 5.4 + this.player.y * 0.62;
+
+        if (this.cameraShake > 0) {
+          this.cameraShake = Math.max(0, this.cameraShake - dt * 1.8);
+        }
+        const shakeX = (Math.random() - 0.5) * this.cameraShake;
+        const shakeY = (Math.random() - 0.5) * this.cameraShake;
+
+        this.camera.position.x += (targetCamX - this.camera.position.x) * Math.min(1, dt * 8);
+        this.camera.position.y += (targetCamY - this.camera.position.y) * Math.min(1, dt * 7);
+        this.camera.position.x += shakeX;
+        this.camera.position.y += shakeY;
+        this.camera.lookAt(this.player.x * 0.35, 2.2 + this.player.y * 0.45, -18);
+
+        // Intensidad de líneas radiales de velocidad (speed streaks)
+        const speedRatio = (effectiveSpeed - PHYSICS.BASE_SPEED) / (PHYSICS.MAX_SPEED - PHYSICS.BASE_SPEED);
+        const streakOpacity = Math.min(0.85, 0.25 + speedRatio * 0.45 + (this.energySurgeTimer > 0 ? 0.3 : 0));
+        document.getElementById('speed-streaks').style.opacity = streakOpacity.toFixed(2);
+      }
+
+      // ==========================================================================
+      // 9. GESTIÓN DE ESTADOS UI, HUD Y PERSISTENCIA
+      // ==========================================================================
+      pauseGame() {
+        this.state = 'PAUSED';
+        document.getElementById('screen-pause').classList.remove('hidden');
+      }
+
+      resumeGame() {
+        this.state = 'PLAYING';
+        document.getElementById('screen-pause').classList.add('hidden');
+      }
+
+      triggerGameOver() {
+        this.state = 'GAME_OVER';
+        this.audio.playCrash();
+        this.flashScreen('rgba(255, 45, 45, 0.42)');
+        this.spawnParticles(this.player.x, this.player.y + 1.0, 0, 0xff4422, 26, 8);
+
+        const finalScore = Math.floor(this.score);
+        let isNewRecord = false;
+        if (finalScore > this.bestScore) {
+          this.bestScore = finalScore;
+          isNewRecord = true;
+          localStorage.setItem('ss3d_best_score', String(this.bestScore));
+        }
+
+        this.bankCoins += this.coins;
+        localStorage.setItem('ss3d_bank_coins', String(this.bankCoins));
+
+        document.getElementById('new-record-badge').style.display = isNewRecord ? 'inline-block' : 'none';
+        document.getElementById('go-score').textContent = finalScore.toLocaleString('es-ES');
+        document.getElementById('go-best').textContent = this.bestScore.toLocaleString('es-ES');
+        document.getElementById('go-distance').textContent = `${Math.floor(this.distance)} m`;
+        document.getElementById('go-coins').textContent = `+${this.coins}`;
+
+        this.updateUI();
+        document.getElementById('screen-gameover').classList.remove('hidden');
+      }
+
+      hideAllOverlays() {
+        document.getElementById('screen-title').classList.add('hidden');
+        document.getElementById('screen-pause').classList.add('hidden');
+        document.getElementById('screen-gameover').classList.add('hidden');
+      }
+
+      updateUI() {
+        document.getElementById('title-best-score').textContent = this.bestScore.toLocaleString('es-ES');
+        document.getElementById('title-bank-coins').textContent = this.bankCoins.toLocaleString('es-ES');
+        this.updateHUDRealtime(1);
+      }
+
+      updateHUDRealtime(activeMult) {
+        const scoreStr = String(Math.floor(this.score)).padStart(6, '0');
+        document.getElementById('hud-score').textContent = scoreStr;
+        document.getElementById('hud-coins').textContent = String(this.coins);
+
+        const multEl = document.getElementById('hud-multiplier');
+        multEl.textContent = `x${activeMult}`;
+        if (this.powerups.doubleScore > 0 || activeMult > 1) {
+          multEl.classList.add('boosted');
+        } else {
+          multEl.classList.remove('boosted');
+        }
+
+        // Estado del botón de Hoverboard
+        const hbBtn = document.getElementById('btn-hoverboard');
+        if (this.powerups.hoverboard > 0 || this.hoverboardCooldown > 0) {
+          hbBtn.classList.add('cooldown');
+        } else {
+          hbBtn.classList.remove('cooldown');
+        }
+
+        // Renderizar barras de power-ups activos
+        const bar = document.getElementById('powerups-bar');
+        const defs = [
+          { key: 'hoverboard', label: 'Hoverboard', icon: '🛹', max: 12, color: '#38f2ff' },
+          { key: 'magnet', label: 'Imán', icon: '🧲', max: 11, color: '#ff2a55' },
+          { key: 'sneakers', label: 'Super Salto', icon: '👟', max: 11, color: '#39ff14' },
+          { key: 'doubleScore', label: 'Doble Punto', icon: '✨', max: 11, color: '#ffaa00' },
+          { key: 'jetpack', label: 'Jetpack', icon: '🚀', max: 7.5, color: '#00e5ff' }
+        ];
+
+        let html = '';
+        for (const d of defs) {
+          const rem = this.powerups[d.key];
+          if (rem > 0) {
+            const pct = Math.min(100, (rem / d.max) * 100);
+            html += `
+              <div class="powerup-item">
+                <div class="powerup-icon">${d.icon}</div>
+                <div class="powerup-info">
+                  <div class="powerup-label">${d.label}</div>
+                  <div class="powerup-track">
+                    <div class="powerup-fill" style="width:${pct}%; background:${d.color};"></div>
+                  </div>
+                </div>
+              </div>
+            `;
+          }
+        }
+        bar.innerHTML = html;
+      }
+
+      showToast(text) {
+        const toast = document.getElementById('toast-banner');
+        toast.textContent = text;
+        toast.classList.add('visible');
+        clearTimeout(this._toastTimeout);
+        this._toastTimeout = setTimeout(() => {
+          toast.classList.remove('visible');
+        }, 1700);
+      }
+
+      flashScreen(rgbaColor) {
+        const flash = document.getElementById('screen-flash');
+        flash.style.backgroundColor = rgbaColor;
+        flash.style.opacity = '1';
+        setTimeout(() => {
+          flash.style.opacity = '0';
+        }, 140);
+      }
+
+      render() {
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
+    // ============================================================================
+    // 10. ARRANQUE DEL BUCLE PRINCIPAL EN WINDOW.ONLOAD
+    // ============================================================================
+    window.onload = function () {
+      const game = new SubwaySurferGame();
+      let lastTime = performance.now();
+
+      function animate(now) {
+        requestAnimationFrame(animate);
+        const rawDt = (now - lastTime) / 1000;
+        lastTime = now;
+        const dt = Math.min(rawDt, 0.05); // Acotado para evitar túneles en colisiones
+
+        game.update(dt);
+        game.render();
+      }
+
+      requestAnimationFrame(animate);
+    };
+  </script>
+</body>
+</html>
